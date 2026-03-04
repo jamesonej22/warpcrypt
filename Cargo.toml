@@ -1,0 +1,3 @@
+[workspace]
+members = ["warpcrypt", "warpcrypt-cli"]
+resolver = "3"

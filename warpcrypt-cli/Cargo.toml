@@ -1,0 +1,8 @@
+[package]
+edition = "2024"
+name = "warpcrypt-cli"
+version = "0.1.0"
+
+[dependencies]
+clap = "4.5.60"
+warpcrypt = { path = "../warpcrypt" }
