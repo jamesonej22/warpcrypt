@@ -6,9 +6,11 @@
  */
 
 #include <cstdint>
+#include <cstring>
 
 #include "aes.cuh"
 #include "rust/cxx.h"
+#include "utils.cuh"
 #include "warpcrypt/src/lib.rs.h"
 
 AesParameters::AesParameters(const CryptoRequest& request) {
@@ -210,6 +212,48 @@ __device__ void aes_add_round_key(uint8_t* state, const uint8_t* round_keys, int
     }
 }
 
+__device__ void aes_gcm_multiplication(const uint8_t* x, const uint8_t* y, uint8_t* output) {
+    uint8_t z[AES_STATE_SIZE] = {0};
+    uint8_t v[AES_STATE_SIZE];
+    std::memcpy(v, y, AES_STATE_SIZE);
+
+    for (int i = 0; i < AES_STATE_SIZE; i++) {
+        for (int bit = 7; bit >= 0; bit--) {
+            if ((x[i] >> bit) & 1) {
+                for (int j = 0; j < AES_STATE_SIZE; j++) {
+                    z[j] ^= v[j];
+                }
+            }
+
+            bool lsb_set = v[AES_STATE_SIZE - 1] & 1;
+            for (int j = AES_STATE_SIZE - 1; j > 0; j--) {
+                v[j] = (v[j] >> 1) | (v[j - 1] << 7);
+            }
+            v[0] >>= 1;
+
+            if (lsb_set) {
+                v[0] ^= 0xe1;
+            }
+        }
+    }
+    std::memcpy(output, z, AES_STATE_SIZE);
+}
+
+__device__ void aes_ghash(const uint8_t* h, const uint8_t* x, size_t len, uint8_t* output) {
+    uint8_t y[AES_STATE_SIZE] = {0};
+    uint8_t tmp[AES_STATE_SIZE];
+
+    size_t num_blocks = len / AES_STATE_SIZE;
+    for (size_t i = 0; i < num_blocks; i++) {
+        for (int j = 0; j < AES_STATE_SIZE; j++) {
+            y[j] ^= x[i * AES_STATE_SIZE + j];
+        }
+        aes_gcm_multiplication(y, h, tmp);
+        std::memcpy(y, tmp, AES_STATE_SIZE);
+    }
+    std::memcpy(output, y, AES_STATE_SIZE);
+}
+
 __device__ void aes_encrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                             const uint8_t* round_keys, size_t thread_idx,
                             AesParameters parameters) {
@@ -264,16 +308,14 @@ __device__ void aes_decrypt(const uint8_t* input, uint8_t* output, const uint8_t
     }
 }
 
-__device__ void aes_encrypt_ctr(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
-                                const uint8_t* round_keys, uint64_t nonce, uint64_t counter,
-                                AesParameters parameters) {
+__device__ void aes_ctr(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
+                        const uint8_t* round_keys, uint64_t nonce, uint64_t counter,
+                        AesParameters parameters) {
     uint8_t state[AES_STATE_SIZE];
 
     // Construct counter block
-    for (int i = 0; i < 8; i++) {
-        state[i] = (nonce >> (56 - 8 * i)) & 0xff;
-        state[8 + i] = (counter >> (56 - 8 * i)) & 0xff;
-    }
+    store_be64(state, nonce);
+    store_be64(state + 8, counter);
 
     int num_rounds = parameters.num_rounds;
     aes_add_round_key(state, round_keys, 0);
@@ -330,12 +372,13 @@ __global__ void aes_decrypt_ecb_kernel(const uint8_t* input, uint8_t* output, si
     }
 }
 
-__global__ void aes_encrypt_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
-                                       uint64_t nonce, size_t ctr_start, AesParameters parameters) {
+__global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
+                               const uint8_t* sbox, const uint8_t* round_keys, uint64_t nonce,
+                               uint64_t ctr_start, AesParameters parameters) {
     __shared__ uint8_t shared_sbox[AES_SBOX_SIZE];
     __shared__ uint8_t shared_round_keys[AES_MAX_TOTAL_KEY_SIZE];
 
-    // aes_load_shared_memory(shared_sbox, shared_round_keys, parameters);
+    aes_load_shared_memory(shared_sbox, shared_round_keys, sbox, round_keys, parameters);
     __syncthreads();
 
     size_t grid_size = blockDim.x * gridDim.x;
@@ -344,10 +387,16 @@ __global__ void aes_encrypt_ctr_kernel(const uint8_t* input, uint8_t* output, si
 
     for (; idx < blocks_to_encrypt; idx += grid_size) {
         uint64_t counter = idx + ctr_start;
-        aes_encrypt_ctr(input + idx * AES_STATE_SIZE, output + idx * AES_STATE_SIZE, shared_sbox,
-                        shared_round_keys, nonce, counter, parameters);
+        aes_ctr(input + idx * AES_STATE_SIZE, output + idx * AES_STATE_SIZE, shared_sbox,
+                shared_round_keys, nonce, counter, parameters);
     }
 }
+
+__device__ void aes_gcm_encrypt(const uint8_t* plaintext, uint8_t* ciphertext, size_t length,
+                                const uint8_t* aad, size_t aad_len,
+                                const uint8_t* nonce,  // 12 bytes standard
+                                uint8_t* tag, const uint8_t* sbox, const uint8_t* round_keys,
+                                AesParameters parameters) {}
 
 bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length) {
@@ -393,7 +442,40 @@ bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint
     return true;
 }
 
-bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* nonce,
+bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                     const uint8_t* input, uint8_t* output, size_t input_length) {
+    AesParameters parameters(request);
+
+    uint8_t round_keys[AES_MAX_TOTAL_KEY_SIZE];
+    aes_expand_key(round_keys, key, parameters);
+
+    // Extract nonce and counter start from IV
+    uint64_t nonce = load_be64(iv);
+    uint64_t ctr_start = load_be64(iv + 8);
+
+    uint8_t* device_input;
+    uint8_t* device_output;
+    uint8_t* device_round_keys;
+    uint8_t* device_sbox;
+
+    cudaMalloc(&device_input, input_length);
+    cudaMalloc(&device_output, input_length);
+    cudaMalloc(&device_round_keys, parameters.total_key_size);
+    cudaMalloc(&device_sbox, AES_SBOX_SIZE);
+
+    cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
+
+    cudaMemcpy(device_sbox, sbox, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
+    aes_ctr_kernel<<<1, 1>>>(device_input, device_output, input_length, device_sbox,
+                             device_round_keys, nonce, ctr_start, parameters);
+
+    cudaDeviceSynchronize();
+    cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);
+
+    cudaFree(device_sbox);
+    cudaFree(device_round_keys);
+    cudaFree(device_output);
+    cudaFree(device_input);
     return true;
 }

@@ -178,13 +178,13 @@ __device__ void aes_decrypt(const uint8_t* input, uint8_t* output, const uint8_t
  * @param nonce Nonce to use as input to the AES encryption for this block.
  * @param counter Counter to use as input to the AES encryption for this block.
  */
-__device__ void aes_encrypt_ctr(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
-                                const uint8_t* round_keys, uint64_t nonce, uint64_t counter,
-                                AesParameters parameters);
+__device__ void aes_ctr(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
+                        const uint8_t* round_keys, uint64_t nonce, uint64_t counter,
+                        AesParameters parameters);
 
 /**
- * @brief Perform the entirety of AES-ECB encryption on the input data using shared memory arrays,
- * copied from global memory.
+ * @brief Perform the entirety of AES-ECB encryption on the input data using shared memory
+ * arrays, copied from global memory.
  *
  * @param input Plaintext to encrypt.
  * @param[out] output Location to store the encrypted ciphertext.
@@ -206,12 +206,13 @@ __global__ void aes_decrypt_ecb_kernel(const uint8_t* input, uint8_t* output, si
  * @param input_size Length of the plaintext in bytes.
  * @param ctr_start The counter starting value for this input.
  */
-__global__ void aes_encrypt_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
-                                       uint64_t nonce, size_t ctr_start, AesParameters parameters);
+__global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
+                               const uint8_t* sbox, const uint8_t* round_keys, uint64_t nonce,
+                               uint64_t ctr_start, AesParameters parameters);
 
 bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length);
 
-bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* nonce,
+bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                     const uint8_t* input, uint8_t* output, size_t input_length);
 #endif

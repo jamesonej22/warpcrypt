@@ -6,9 +6,8 @@
 
 struct CryptoRequest;
 
-bool execute_crypto(const CryptoRequest &request,
-                    rust::Slice<const uint8_t> key,
-                    rust::Slice<const uint8_t> nonce,
-                    rust::Slice<const uint8_t> input,
+bool execute_crypto(const CryptoRequest& request, rust::Slice<const uint8_t> key,
+                    rust::Slice<const uint8_t> iv, rust::Slice<const uint8_t> input,
                     rust::Slice<uint8_t> output);
+
 #endif

@@ -1,38 +1,60 @@
 //! Crate
 
+#![warn(missing_docs)]
 #![allow(dead_code)]
 
+pub use ffi::{Algorithm, CryptoRequest, KeySize, Operation, execute_crypto};
+
 #[cxx::bridge]
-pub mod ffi {
+mod ffi {
+    /// Algorithm to use in a cryptographic operation.
     enum Algorithm {
+        /// AES in ECB mode with possible key sizes of 128, 192, 256
         AesEcb,
+        /// AES in CTR mode with possible key sizes of 128, 192, 256
         AesCtr,
     }
 
+    /// Possible valid key sizes for use in cryptographic operations.
     enum KeySize {
+        /// Variant representing the 128 bit (16 byte) key size
         KeySize128,
+        /// Variant representing the 192 bit (24 byte) key size
         KeySize192,
+        /// Variant representing the 256 bit (32 byte) key size
         KeySize256,
     }
 
+    /// Valid operations to perform on a piece of data.
     enum Operation {
+        /// Variant representing the encryption operation
         Encrypt,
+        /// Variant representing the decryption operation
         Decrypt,
     }
 
+    /// Fully-packaged request for a cryptographic operation. Note that not all ([`Algorithm`],
+    /// [`Operation`], [`KeySize`]) combinations are supported.
     struct CryptoRequest {
+        /// Algorithm to use for this cryptographic operation
         algorithm: Algorithm,
+        /// Operation to perform on the data.
         operation: Operation,
+        /// Key size to use for this operation.
         key_size: KeySize,
     }
 
     unsafe extern "C++" {
         include!("warpcrypt/cuda/include/warpcrypt.cuh");
 
+        /// Main CUDA driver function for performing a cryptographic operation. All necessary
+        /// parameters to complete the operation are defined and passed in here.
+        ///
+        /// # Example
         fn execute_crypto(
             request: &CryptoRequest,
             key: &[u8],
-            nonce: &[u8],
+            iv: &[u8],
             input: &[u8],
             output: &mut [u8],
         ) -> bool;
@@ -41,36 +63,31 @@ pub mod ffi {
 
 #[cfg(test)]
 mod test {
-    use crate::ffi::{Algorithm, CryptoRequest, KeySize, Operation, execute_crypto};
+    use rstest::rstest;
+
+    use crate::{Algorithm, CryptoRequest, KeySize, Operation, execute_crypto};
+
+    const AES_PLAINTEXT: [u8; 64] = [
+        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17,
+        0x2a, 0xae, 0x2d, 0x8a, 0x57, 0x1e, 0x03, 0xac, 0x9c, 0x9e, 0xb7, 0x6f, 0xac, 0x45, 0xaf,
+        0x8e, 0x51, 0x30, 0xc8, 0x1c, 0x46, 0xa3, 0x5c, 0xe4, 0x11, 0xe5, 0xfb, 0xc1, 0x19, 0x1a,
+        0x0a, 0x52, 0xef, 0xf6, 0x9f, 0x24, 0x45, 0xdf, 0x4f, 0x9b, 0x17, 0xad, 0x2b, 0x41, 0x7b,
+        0xe6, 0x6c, 0x37, 0x10,
+    ];
+
+    const AES_CTR_IV: [u8; 16] = [
+        0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe,
+        0xff,
+    ];
 
     const AES_128_KEY: [u8; 16] = [
         0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f,
         0x3c,
     ];
 
-    const AES_128_ECB_PLAINTEXT: [u8; 16] = [
-        0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07,
-        0x34,
-    ];
-
-    const AES_128_ECB_CIPHERTEXT: [u8; 16] = [
-        0x39, 0x25, 0x84, 0x1d, 0x02, 0xdc, 0x09, 0xfb, 0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0x0b,
-        0x32,
-    ];
-
     const AES_192_KEY: [u8; 24] = [
         0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52, 0xc8, 0x10, 0xf3, 0x2b, 0x80, 0x90, 0x79,
         0xe5, 0x62, 0xf8, 0xea, 0xd2, 0x52, 0x2c, 0x6b, 0x7b,
-    ];
-
-    const AES_192_ECB_PLAINTEXT: [u8; 16] = [
-        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17,
-        0x2a,
-    ];
-
-    const AES_192_ECB_CIPHERTEXT: [u8; 16] = [
-        0xbd, 0x33, 0x4f, 0x1d, 0x6e, 0x45, 0xf2, 0x5f, 0xf7, 0x12, 0xa2, 0x14, 0x57, 0x1f, 0xa5,
-        0xcc,
     ];
 
     const AES_256_KEY: [u8; 32] = [
@@ -79,139 +96,113 @@ mod test {
         0xdf, 0xf4,
     ];
 
-    const AES_256_ECB_PLAINTEXT: [u8; 16] = [
-        0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17,
-        0x2a,
+    const AES_128_ECB_CIPHERTEXT: [u8; 64] = [
+        0x3a, 0xd7, 0x7b, 0xb4, 0x0d, 0x7a, 0x36, 0x60, 0xa8, 0x9e, 0xca, 0xf3, 0x24, 0x66, 0xef,
+        0x97, 0xf5, 0xd3, 0xd5, 0x85, 0x03, 0xb9, 0x69, 0x9d, 0xe7, 0x85, 0x89, 0x5a, 0x96, 0xfd,
+        0xba, 0xaf, 0x43, 0xb1, 0xcd, 0x7f, 0x59, 0x8e, 0xce, 0x23, 0x88, 0x1b, 0x00, 0xe3, 0xed,
+        0x03, 0x06, 0x88, 0x7b, 0x0c, 0x78, 0x5e, 0x27, 0xe8, 0xad, 0x3f, 0x82, 0x23, 0x20, 0x71,
+        0x04, 0x72, 0x5d, 0xd4,
     ];
 
-    const AES_256_ECB_CIPHERTEXT: [u8; 16] = [
+    const AES_192_ECB_CIPHERTEXT: [u8; 64] = [
+        0xbd, 0x33, 0x4f, 0x1d, 0x6e, 0x45, 0xf2, 0x5f, 0xf7, 0x12, 0xa2, 0x14, 0x57, 0x1f, 0xa5,
+        0xcc, 0x97, 0x41, 0x04, 0x84, 0x6d, 0x0a, 0xd3, 0xad, 0x77, 0x34, 0xec, 0xb3, 0xec, 0xee,
+        0x4e, 0xef, 0xef, 0x7a, 0xfd, 0x22, 0x70, 0xe2, 0xe6, 0x0a, 0xdc, 0xe0, 0xba, 0x2f, 0xac,
+        0xe6, 0x44, 0x4e, 0x9a, 0x4b, 0x41, 0xba, 0x73, 0x8d, 0x6c, 0x72, 0xfb, 0x16, 0x69, 0x16,
+        0x03, 0xc1, 0x8e, 0x0e,
+    ];
+
+    const AES_256_ECB_CIPHERTEXT: [u8; 64] = [
         0xf3, 0xee, 0xd1, 0xbd, 0xb5, 0xd2, 0xa0, 0x3c, 0x06, 0x4b, 0x5a, 0x7e, 0x3d, 0xb1, 0x81,
-        0xf8,
+        0xf8, 0x59, 0x1c, 0xcb, 0x10, 0xd4, 0x10, 0xed, 0x26, 0xdc, 0x5b, 0xa7, 0x4a, 0x31, 0x36,
+        0x28, 0x70, 0xb6, 0xed, 0x21, 0xb9, 0x9c, 0xa6, 0xf4, 0xf9, 0xf1, 0x53, 0xe7, 0xb1, 0xbe,
+        0xaf, 0xed, 0x1d, 0x23, 0x30, 0x4b, 0x7a, 0x39, 0xf9, 0xf3, 0xff, 0x06, 0x7d, 0x8d, 0x8f,
+        0x9e, 0x24, 0xec, 0xc7,
     ];
 
-    #[test]
-    fn aes128ecb_encrypt() {
+    const AES_128_CTR_CIPHERTEXT: [u8; 64] = [
+        0x87, 0x4d, 0x61, 0x91, 0xb6, 0x20, 0xe3, 0x26, 0x1b, 0xef, 0x68, 0x64, 0x99, 0x0d, 0xb6,
+        0xce, 0x98, 0x06, 0xf6, 0x6b, 0x79, 0x70, 0xfd, 0xff, 0x86, 0x17, 0x18, 0x7b, 0xb9, 0xff,
+        0xfd, 0xff, 0x5a, 0xe4, 0xdf, 0x3e, 0xdb, 0xd5, 0xd3, 0x5e, 0x5b, 0x4f, 0x09, 0x02, 0x0d,
+        0xb0, 0x3e, 0xab, 0x1e, 0x03, 0x1d, 0xda, 0x2f, 0xbe, 0x03, 0xd1, 0x79, 0x21, 0x70, 0xa0,
+        0xf3, 0x00, 0x9c, 0xee,
+    ];
+
+    const AES_192_CTR_CIPHERTEXT: [u8; 64] = [
+        0x1a, 0xbc, 0x93, 0x24, 0x17, 0x52, 0x1c, 0xa2, 0x4f, 0x2b, 0x04, 0x59, 0xfe, 0x7e, 0x6e,
+        0x0b, 0x09, 0x03, 0x39, 0xec, 0x0a, 0xa6, 0xfa, 0xef, 0xd5, 0xcc, 0xc2, 0xc6, 0xf4, 0xce,
+        0x8e, 0x94, 0x1e, 0x36, 0xb2, 0x6b, 0xd1, 0xeb, 0xc6, 0x70, 0xd1, 0xbd, 0x1d, 0x66, 0x56,
+        0x20, 0xab, 0xf7, 0x4f, 0x78, 0xa7, 0xf6, 0xd2, 0x98, 0x09, 0x58, 0x5a, 0x97, 0xda, 0xec,
+        0x58, 0xc6, 0xb0, 0x50,
+    ];
+
+    const AES_256_CTR_CIPHERTEXT: [u8; 64] = [
+        0x60, 0x1e, 0xc3, 0x13, 0x77, 0x57, 0x89, 0xa5, 0xb7, 0xa7, 0xf5, 0x04, 0xbb, 0xf3, 0xd2,
+        0x28, 0xf4, 0x43, 0xe3, 0xca, 0x4d, 0x62, 0xb5, 0x9a, 0xca, 0x84, 0xe9, 0x90, 0xca, 0xca,
+        0xf5, 0xc5, 0x2b, 0x09, 0x30, 0xda, 0xa2, 0x3d, 0xe9, 0x4c, 0xe8, 0x70, 0x17, 0xba, 0x2d,
+        0x84, 0x98, 0x8d, 0xdf, 0xc9, 0xc5, 0x8d, 0xb6, 0x7a, 0xad, 0xa6, 0x13, 0xc2, 0xdd, 0x08,
+        0x45, 0x79, 0x41, 0xa6,
+    ];
+
+    #[rstest]
+    #[case::aes128_encrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Encrypt, &AES_128_ECB_CIPHERTEXT)]
+    #[case::aes128_decrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Decrypt, &AES_128_ECB_CIPHERTEXT)]
+    #[case::aes192_encrypt(KeySize::KeySize192, &AES_192_KEY, Operation::Encrypt, &AES_192_ECB_CIPHERTEXT)]
+    #[case::aes192_decrypt(KeySize::KeySize192, &AES_192_KEY, Operation::Decrypt, &AES_192_ECB_CIPHERTEXT)]
+    #[case::aes256_encrypt(KeySize::KeySize256, &AES_256_KEY, Operation::Encrypt, &AES_256_ECB_CIPHERTEXT)]
+    #[case::aes256_decrypt(KeySize::KeySize256, &AES_256_KEY, Operation::Decrypt, &AES_256_ECB_CIPHERTEXT)]
+    fn aes_ecb(
+        #[case] key_size: KeySize,
+        #[case] key: &[u8],
+        #[case] operation: Operation,
+        #[case] ciphertext: &[u8; 64],
+    ) {
         let request = CryptoRequest {
             algorithm: Algorithm::AesEcb,
-            operation: Operation::Encrypt,
-            key_size: KeySize::KeySize128,
+            operation,
+            key_size,
         };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
-        assert!(execute_crypto(
-            &request,
-            &AES_128_KEY,
-            &nonce,
-            &AES_128_ECB_PLAINTEXT,
-            &mut output
-        ));
-        assert_eq!(AES_128_ECB_CIPHERTEXT, output);
+        let mut output = [0u8; 64];
+        let (input, expected) = match operation {
+            Operation::Encrypt => (AES_PLAINTEXT.as_ref(), ciphertext.as_ref()),
+            Operation::Decrypt => (ciphertext.as_ref(), AES_PLAINTEXT.as_ref()),
+            _ => unimplemented!(),
+        };
+        assert!(execute_crypto(&request, key, &[0u8], input, &mut output));
+        assert_eq!(expected, &output);
     }
 
-    #[test]
-    fn aes128ecb_decrypt() {
+    #[rstest]
+    #[case::aes128_encrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Encrypt, &AES_128_CTR_CIPHERTEXT)]
+    #[case::aes128_decrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Decrypt, &AES_128_CTR_CIPHERTEXT)]
+    #[case::aes192_encrypt(KeySize::KeySize192, &AES_192_KEY, Operation::Encrypt, &AES_192_CTR_CIPHERTEXT)]
+    #[case::aes192_decrypt(KeySize::KeySize192, &AES_192_KEY, Operation::Decrypt, &AES_192_CTR_CIPHERTEXT)]
+    #[case::aes256_encrypt(KeySize::KeySize256, &AES_256_KEY, Operation::Encrypt, &AES_256_CTR_CIPHERTEXT)]
+    #[case::aes256_decrypt(KeySize::KeySize256, &AES_256_KEY, Operation::Decrypt, &AES_256_CTR_CIPHERTEXT)]
+    fn aes_ctr(
+        #[case] key_size: KeySize,
+        #[case] key: &[u8],
+        #[case] operation: Operation,
+        #[case] ciphertext: &[u8; 64],
+    ) {
         let request = CryptoRequest {
-            algorithm: Algorithm::AesEcb,
-            operation: Operation::Decrypt,
-            key_size: KeySize::KeySize128,
+            algorithm: Algorithm::AesCtr,
+            operation,
+            key_size,
         };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
+        let mut output = [0u8; 64];
+        let (input, expected) = match operation {
+            Operation::Encrypt => (AES_PLAINTEXT.as_ref(), ciphertext.as_ref()),
+            Operation::Decrypt => (ciphertext.as_ref(), AES_PLAINTEXT.as_ref()),
+            _ => unimplemented!(),
+        };
         assert!(execute_crypto(
             &request,
-            &AES_128_KEY,
-            &nonce,
-            &AES_128_ECB_CIPHERTEXT,
+            key,
+            &AES_CTR_IV,
+            input,
             &mut output
         ));
-        assert_eq!(AES_128_ECB_PLAINTEXT, output);
-    }
-
-    #[test]
-    fn aes192ecb_encrypt() {
-        let request = CryptoRequest {
-            algorithm: Algorithm::AesEcb,
-            operation: Operation::Encrypt,
-            key_size: KeySize::KeySize192,
-        };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
-        assert!(execute_crypto(
-            &request,
-            &AES_192_KEY,
-            &nonce,
-            &AES_192_ECB_PLAINTEXT,
-            &mut output
-        ));
-        assert_eq!(AES_192_ECB_CIPHERTEXT, output);
-    }
-
-    #[test]
-    fn aes192ecb_decrypt() {
-        let request = CryptoRequest {
-            algorithm: Algorithm::AesEcb,
-            operation: Operation::Decrypt,
-            key_size: KeySize::KeySize192,
-        };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
-        assert!(execute_crypto(
-            &request,
-            &AES_192_KEY,
-            &nonce,
-            &AES_192_ECB_CIPHERTEXT,
-            &mut output
-        ));
-        assert_eq!(AES_192_ECB_PLAINTEXT, output);
-    }
-
-    #[test]
-    fn aes256ecb_encrypt() {
-        let request = CryptoRequest {
-            algorithm: Algorithm::AesEcb,
-            operation: Operation::Encrypt,
-            key_size: KeySize::KeySize256,
-        };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
-        assert!(execute_crypto(
-            &request,
-            &AES_256_KEY,
-            &nonce,
-            &AES_256_ECB_PLAINTEXT,
-            &mut output
-        ));
-        assert_eq!(AES_256_ECB_CIPHERTEXT, output);
-    }
-
-    #[test]
-    fn aes256ecb_decrypt() {
-        let request = CryptoRequest {
-            algorithm: Algorithm::AesEcb,
-            operation: Operation::Decrypt,
-            key_size: KeySize::KeySize256,
-        };
-
-        let mut output = [0u8; 16];
-        let nonce = [0u8];
-
-        assert!(execute_crypto(
-            &request,
-            &AES_256_KEY,
-            &nonce,
-            &AES_256_ECB_CIPHERTEXT,
-            &mut output
-        ));
-        assert_eq!(AES_256_ECB_PLAINTEXT, output);
+        assert_eq!(expected, &output);
     }
 }
