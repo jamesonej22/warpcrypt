@@ -59,16 +59,16 @@ void aes_expand_key(uint8_t* round_keys, const uint8_t* key, AesParameters param
             temp_word[3] = temp;
 
             for (int i = 0; i < WORD_SIZE; i++) {
-                temp_word[i] = sbox[temp_word[i]];
+                temp_word[i] = AES_SBOX[temp_word[i]];
             }
 
-            temp_word[0] ^= round_constants[rcon_idx];
+            temp_word[0] ^= AES_ROUND_CONSTANTS[rcon_idx];
             rcon_idx++;
         }
 
         if (key_size == AES_KEY_SIZE_256 && (current_key_size % key_size) == AES_STATE_SIZE) {
             for (size_t i = 0; i < WORD_SIZE; i++) {
-                temp_word[i] = sbox[temp_word[i]];
+                temp_word[i] = AES_SBOX[temp_word[i]];
             }
         }
 
@@ -392,12 +392,6 @@ __global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t inp
     }
 }
 
-__device__ void aes_gcm_encrypt(const uint8_t* plaintext, uint8_t* ciphertext, size_t length,
-                                const uint8_t* aad, size_t aad_len,
-                                const uint8_t* nonce,  // 12 bytes standard
-                                uint8_t* tag, const uint8_t* sbox, const uint8_t* round_keys,
-                                AesParameters parameters) {}
-
 bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length) {
     AesParameters parameters(request);
@@ -416,19 +410,20 @@ bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint
     cudaMalloc(&device_sbox, AES_SBOX_SIZE);
 
     cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
 
     switch (request.operation) {
         case Operation::Encrypt:
-            cudaMemcpy(device_sbox, sbox, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
-            cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
-            aes_encrypt_ecb_kernel<<<1, 1>>>(device_input, device_output, input_length, device_sbox,
-                                             device_round_keys, parameters);
+            cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
+            aes_encrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
+                device_input, device_output, input_length, device_sbox, device_round_keys,
+                parameters);
             break;
         case Operation::Decrypt:
-            cudaMemcpy(device_sbox, inverse_sbox, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
-            cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
-            aes_decrypt_ecb_kernel<<<1, 1>>>(device_input, device_output, input_length, device_sbox,
-                                             device_round_keys, parameters);
+            cudaMemcpy(device_sbox, AES_INVERSE_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
+            aes_decrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
+                device_input, device_output, input_length, device_sbox, device_round_keys,
+                parameters);
             break;
     }
 
@@ -465,10 +460,11 @@ bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint
 
     cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
 
-    cudaMemcpy(device_sbox, sbox, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
     cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
-    aes_ctr_kernel<<<1, 1>>>(device_input, device_output, input_length, device_sbox,
-                             device_round_keys, nonce, ctr_start, parameters);
+    aes_ctr_kernel<<<request.num_blocks, request.block_size>>>(
+        device_input, device_output, input_length, device_sbox, device_round_keys, nonce, ctr_start,
+        parameters);
 
     cudaDeviceSynchronize();
     cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);

@@ -8,29 +8,39 @@ pub use ffi::{Algorithm, CryptoRequest, KeySize, Operation, execute_crypto};
 #[cxx::bridge]
 mod ffi {
     /// Algorithm to use in a cryptographic operation.
+    #[derive(Default)]
     enum Algorithm {
         /// AES in ECB mode with possible key sizes of 128, 192, 256
+        #[default]
         AesEcb,
         /// AES in CTR mode with possible key sizes of 128, 192, 256
         AesCtr,
+        /// Camellia in ECB mode with possible key sizes of 128, 192, 256
+        CamelliaEcb,
+        /// Camellia in CTR mode with possible key sizes of 128, 192, 256
+        CamelliaCtr,
+    }
+
+    /// Valid operations to perform on a piece of data.
+    #[derive(Default)]
+    enum Operation {
+        /// Variant representing the encryption operation
+        #[default]
+        Encrypt,
+        /// Variant representing the decryption operation
+        Decrypt,
     }
 
     /// Possible valid key sizes for use in cryptographic operations.
+    #[derive(Default)]
     enum KeySize {
         /// Variant representing the 128 bit (16 byte) key size
+        #[default]
         KeySize128,
         /// Variant representing the 192 bit (24 byte) key size
         KeySize192,
         /// Variant representing the 256 bit (32 byte) key size
         KeySize256,
-    }
-
-    /// Valid operations to perform on a piece of data.
-    enum Operation {
-        /// Variant representing the encryption operation
-        Encrypt,
-        /// Variant representing the decryption operation
-        Decrypt,
     }
 
     /// Fully-packaged request for a cryptographic operation. Note that not all ([`Algorithm`],
@@ -42,6 +52,12 @@ mod ffi {
         operation: Operation,
         /// Key size to use for this operation.
         key_size: KeySize,
+        /// Number of CUDA thread blocks to use
+        num_blocks: usize,
+        /// Number of CUDA threads per block
+        block_size: usize,
+        /// Number of CUDA streams to use
+        num_streams: usize,
     }
 
     unsafe extern "C++" {
@@ -58,6 +74,19 @@ mod ffi {
             input: &[u8],
             output: &mut [u8],
         ) -> bool;
+    }
+}
+
+impl Default for CryptoRequest {
+    fn default() -> Self {
+        Self {
+            algorithm: Default::default(),
+            operation: Default::default(),
+            key_size: Default::default(),
+            num_blocks: 1,
+            block_size: 1,
+            num_streams: 1,
+        }
     }
 }
 
@@ -144,6 +173,97 @@ mod test {
         0x45, 0x79, 0x41, 0xa6,
     ];
 
+    const CAMELLIA_PLAINTEXT: [u8; 16] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
+        0x10,
+    ];
+
+    const CAMELLIA_128_KEY: [u8; 16] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
+        0x10,
+    ];
+
+    const CAMELLIA_192_KEY: [u8; 24] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
+        0x10, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    ];
+
+    const CAMELLIA_256_KEY: [u8; 32] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
+        0x10, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+        0xee, 0xff,
+    ];
+
+    const CAMELLIA_128_ECB_CIPHERTEXT: [u8; 16] = [
+        0x67, 0x67, 0x31, 0x38, 0x54, 0x96, 0x69, 0x73, 0x08, 0x57, 0x06, 0x56, 0x48, 0xea, 0xbe,
+        0x43,
+    ];
+
+    const CAMELLIA_192_ECB_CIPHERTEXT: [u8; 16] = [
+        0xb4, 0x99, 0x34, 0x01, 0xb3, 0xe9, 0x96, 0xf8, 0x4e, 0xe5, 0xce, 0xe7, 0xd7, 0x9b, 0x09,
+        0xb9,
+    ];
+
+    const CAMELLIA_256_ECB_CIPHERTEXT: [u8; 16] = [
+        0x9a, 0xcc, 0x23, 0x7d, 0xff, 0x16, 0xd7, 0x6c, 0x20, 0xef, 0x7c, 0x91, 0x9e, 0x3a, 0x75,
+        0x09,
+    ];
+
+    const CAMELLIA_CTR_PLAINTEXT: [u8; 32] = [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+        0x1e, 0x1f,
+    ];
+
+    const CAMELLIA_128_CTR_IV: [u8; 16] = [
+        0x00, 0x6c, 0xb6, 0xdb, 0xc0, 0x54, 0x3b, 0x59, 0xda, 0x48, 0xd9, 0x0b, 0x00, 0x00, 0x00,
+        0x01,
+    ];
+
+    const CAMELLIA_128_CTR_KEY: [u8; 16] = [
+        0x7e, 0x24, 0x06, 0x78, 0x17, 0xfa, 0xe0, 0xd7, 0x43, 0xd6, 0xce, 0x1f, 0x32, 0x53, 0x91,
+        0x63,
+    ];
+
+    const CAMELLIA_128_CTR_CIPHERTEXT: [u8; 32] = [
+        0xdb, 0xf3, 0xc7, 0x8d, 0xc0, 0x83, 0x96, 0xd4, 0xda, 0x7c, 0x90, 0x77, 0x65, 0xbb, 0xcb,
+        0x44, 0x2b, 0x8e, 0x8e, 0x0f, 0x31, 0xf0, 0xdc, 0xa7, 0x2c, 0x74, 0x17, 0xe3, 0x53, 0x60,
+        0xe0, 0x48,
+    ];
+
+    const CAMELLIA_192_CTR_IV: [u8; 16] = [
+        0x00, 0x96, 0xb0, 0x3b, 0x02, 0x0c, 0x6e, 0xad, 0xc2, 0xcb, 0x50, 0x0d, 0x00, 0x00, 0x00,
+        0x01,
+    ];
+
+    const CAMELLIA_192_CTR_KEY: [u8; 24] = [
+        0x7c, 0x5c, 0xb2, 0x40, 0x1b, 0x3d, 0xc3, 0x3c, 0x19, 0xe7, 0x34, 0x08, 0x19, 0xe0, 0xf6,
+        0x9c, 0x67, 0x8c, 0x3d, 0xb8, 0xe6, 0xf6, 0xa9, 0x1a,
+    ];
+
+    const CAMELLIA_192_CTR_CIPHERTEXT: [u8; 32] = [
+        0x7d, 0xef, 0x34, 0xf7, 0xa5, 0xd0, 0xe4, 0x15, 0x67, 0x4b, 0x7f, 0xfc, 0xae, 0x67, 0xc7,
+        0x5d, 0xd0, 0x18, 0xb8, 0x6f, 0xf2, 0x30, 0x51, 0xe0, 0x56, 0x39, 0x2a, 0x99, 0xf3, 0x5a,
+        0x4c, 0xed,
+    ];
+
+    const CAMELLIA_256_CTR_IV: [u8; 16] = [
+        0x00, 0xfa, 0xac, 0x24, 0xc1, 0x58, 0x5e, 0xf1, 0x5a, 0x43, 0xd8, 0x75, 0x00, 0x00, 0x00,
+        0x01,
+    ];
+
+    const CAMELLIA_256_CTR_KEY: [u8; 32] = [
+        0xf6, 0xd6, 0x6d, 0x6b, 0xd5, 0x2d, 0x59, 0xbb, 0x07, 0x96, 0x36, 0x58, 0x79, 0xef, 0xf8,
+        0x86, 0xc6, 0x6d, 0xd5, 0x1a, 0x5b, 0x6a, 0x99, 0x74, 0x4b, 0x50, 0x59, 0x0c, 0x87, 0xa2,
+        0x38, 0x84,
+    ];
+
+    const CAMELLIA_256_CTR_CIPHERTEXT: [u8; 32] = [
+        0xd6, 0xc3, 0x03, 0x92, 0x24, 0x6f, 0x78, 0x08, 0xa8, 0x3c, 0x2b, 0x22, 0xa8, 0x83, 0x9e,
+        0x45, 0xe5, 0x1c, 0xd4, 0x8a, 0x1c, 0xdf, 0x40, 0x6e, 0xbc, 0x9c, 0xc2, 0xd3, 0xab, 0x83,
+        0x41, 0x08,
+    ];
+
     #[rstest]
     #[case::aes128_encrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Encrypt, &AES_128_ECB_CIPHERTEXT)]
     #[case::aes128_decrypt(KeySize::KeySize128, &AES_128_KEY, Operation::Decrypt, &AES_128_ECB_CIPHERTEXT)]
@@ -161,6 +281,9 @@ mod test {
             algorithm: Algorithm::AesEcb,
             operation,
             key_size,
+            num_blocks: 1,
+            block_size: 1,
+            num_streams: 1,
         };
         let mut output = [0u8; 64];
         let (input, expected) = match operation {
@@ -189,6 +312,9 @@ mod test {
             algorithm: Algorithm::AesCtr,
             operation,
             key_size,
+            num_blocks: 1,
+            block_size: 1,
+            num_streams: 1,
         };
         let mut output = [0u8; 64];
         let (input, expected) = match operation {
@@ -203,6 +329,69 @@ mod test {
             input,
             &mut output
         ));
+        assert_eq!(expected, &output);
+    }
+
+    #[rstest]
+    #[case::camellia128_encrypt(KeySize::KeySize128, &CAMELLIA_128_KEY, Operation::Encrypt, &CAMELLIA_128_ECB_CIPHERTEXT)]
+    #[case::camellia128_decrypt(KeySize::KeySize128, &CAMELLIA_128_KEY, Operation::Decrypt, &CAMELLIA_128_ECB_CIPHERTEXT)]
+    #[case::camellia192_encrypt(KeySize::KeySize192, &CAMELLIA_192_KEY, Operation::Encrypt, &CAMELLIA_192_ECB_CIPHERTEXT)]
+    #[case::camellia192_decrypt(KeySize::KeySize192, &CAMELLIA_192_KEY, Operation::Decrypt, &CAMELLIA_192_ECB_CIPHERTEXT)]
+    #[case::camellia256_encrypt(KeySize::KeySize256, &CAMELLIA_256_KEY, Operation::Encrypt, &CAMELLIA_256_ECB_CIPHERTEXT)]
+    #[case::camellia256_encrypt(KeySize::KeySize256, &CAMELLIA_256_KEY, Operation::Decrypt, &CAMELLIA_256_ECB_CIPHERTEXT)]
+    fn camellia_ecb(
+        #[case] key_size: KeySize,
+        #[case] key: &[u8],
+        #[case] operation: Operation,
+        #[case] ciphertext: &[u8; 16],
+    ) {
+        let request = CryptoRequest {
+            algorithm: Algorithm::CamelliaEcb,
+            operation,
+            key_size,
+            num_blocks: 1,
+            block_size: 1,
+            num_streams: 1,
+        };
+        let mut output = [0u8; 16];
+        let (input, expected) = match operation {
+            Operation::Encrypt => (CAMELLIA_PLAINTEXT.as_ref(), ciphertext.as_ref()),
+            Operation::Decrypt => (ciphertext.as_ref(), CAMELLIA_PLAINTEXT.as_ref()),
+            _ => unimplemented!(),
+        };
+        assert!(execute_crypto(&request, key, &[0u8], input, &mut output));
+        assert_eq!(expected, &output);
+    }
+
+    #[rstest]
+    #[case::camellia128_encrypt(KeySize::KeySize128, &CAMELLIA_128_CTR_KEY, &CAMELLIA_128_CTR_IV, Operation::Encrypt, &CAMELLIA_128_CTR_CIPHERTEXT)]
+    #[case::camellia128_decrypt(KeySize::KeySize128, &CAMELLIA_128_CTR_KEY, &CAMELLIA_128_CTR_IV, Operation::Decrypt, &CAMELLIA_128_CTR_CIPHERTEXT)]
+    #[case::camellia192_encrypt(KeySize::KeySize192, &CAMELLIA_192_CTR_KEY, &CAMELLIA_192_CTR_IV, Operation::Encrypt, &CAMELLIA_192_CTR_CIPHERTEXT)]
+    #[case::camellia192_decrypt(KeySize::KeySize192, &CAMELLIA_192_CTR_KEY, &CAMELLIA_192_CTR_IV, Operation::Decrypt, &CAMELLIA_192_CTR_CIPHERTEXT)]
+    #[case::camellia256_encrypt(KeySize::KeySize256, &CAMELLIA_256_CTR_KEY, &CAMELLIA_256_CTR_IV, Operation::Encrypt, &CAMELLIA_256_CTR_CIPHERTEXT)]
+    #[case::camellia256_decrypt(KeySize::KeySize256, &CAMELLIA_256_CTR_KEY, &CAMELLIA_256_CTR_IV, Operation::Decrypt, &CAMELLIA_256_CTR_CIPHERTEXT)]
+    fn camellia_ctr(
+        #[case] key_size: KeySize,
+        #[case] key: &[u8],
+        #[case] iv: &[u8],
+        #[case] operation: Operation,
+        #[case] ciphertext: &[u8; 32],
+    ) {
+        let request = CryptoRequest {
+            algorithm: Algorithm::CamelliaCtr,
+            operation,
+            key_size,
+            num_blocks: 1,
+            block_size: 1,
+            num_streams: 1,
+        };
+        let mut output = [0u8; 32];
+        let (input, expected) = match operation {
+            Operation::Encrypt => (CAMELLIA_CTR_PLAINTEXT.as_ref(), ciphertext.as_ref()),
+            Operation::Decrypt => (ciphertext.as_ref(), CAMELLIA_CTR_PLAINTEXT.as_ref()),
+            _ => unimplemented!(),
+        };
+        assert!(execute_crypto(&request, key, iv, input, &mut output));
         assert_eq!(expected, &output);
     }
 }

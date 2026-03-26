@@ -16,4 +16,19 @@ __host__ __device__ __forceinline__ void store_be64(uint8_t* p, uint64_t v) {
     }
 }
 
+__host__ __device__ __forceinline__ void rotl128(const uint64_t in[2], int n, uint64_t out[2]) {
+    n %= 128;
+    if (n == 0) {
+        out[0] = in[0];
+        out[1] = in[1];
+    } else if (n < 64) {
+        out[0] = (in[0] << n) | (in[1] >> (64 - n));
+        out[1] = (in[1] << n) | (in[0] >> (64 - n));
+    } else {
+        n -= 64;
+        out[0] = (in[1] << n) | (in[0] >> (64 - n));
+        out[1] = (in[0] << n) | (in[1] >> (64 - n));
+    }
+};
+
 #endif
