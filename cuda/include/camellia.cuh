@@ -1,7 +1,7 @@
 /** @file camellia.cuh
  * @author Eric Jameson
- * @brief Declaration of constants and functions used in Camellia. All constants and
- * functions are described in the Camellia RFC: https://www.rfc-editor.org/rfc/rfc3713
+ * @brief Implementation of functions used in Camellia. All functions are described in the Camellia
+ * RFC: https://www.rfc-editor.org/rfc/rfc3713
  */
 
 #ifndef __WARPCRYPT_CAMELLIA_CUH
@@ -128,63 +128,224 @@ const CamelliaSboxes CAMELLIA_HOST_SBOXES = {
               0xa2, 0xfa, 0x07, 0x55, 0xee, 0x0a, 0x49, 0x68, 0x38, 0xa4, 0x28, 0x7b, 0xc9, 0xc1,
               0xe3, 0xf4, 0xc7, 0x9e}};
 
+/** @brief Struct used to store the entirety of the Camellia key schedule. */
 struct CamelliaKeySchedule {
+    /** @brief The Camellia `k` array. */
     uint64_t k[CAMELLIA_MAX_ROUNDS];
+    /** @brief The Camellia `kw` array. */
     uint64_t kw[CAMELLIA_KW_SIZE];
+    /** @brief The Camellia `ke` array. */
     uint64_t ke[CAMELLIA_KE_MAX_SIZE];
 };
 
+/** @brief Struct used to contain all relevant Camellia parameters for a particular request. */
 struct CamelliaParameters {
+    /** @brief Key size in bytes. */
     size_t key_size;
-    int num_rounds;
 
+    /** @brief Constructor of a CamelliaParameters object from a given CryptoRequest. */
     CamelliaParameters(const CryptoRequest& request);
 };
 
+/** @brief Generate the KA and KB subkeys, which are used to then generate the full key schedule.
+ * For more information, see RFC 3713 Section 2.2.
+ *
+ * @param key Provided key before expansion.
+ * @param[out] schedule Location to store the expanded key schedule.
+ * @param sboxes Memory location of the S-boxes to use for key generation.
+ * @param parameters Parameters for this run of Camellia.
+ */
 void camellia_generate_keys(const uint8_t* key, CamelliaKeySchedule* schedule,
                             const CamelliaSboxes* sboxes, CamelliaParameters parameters);
 
+/** @brief From the KA and KB subkeys, generate the full key schedule for this run. For more
+ * information, see RFC 3713 Section 2.2.
+ *
+ * @param ka KA subkey generated for this key expansion.
+ * @param kb KB subkey generated for this key expansion.
+ * @param kl The left 128 bits of the key as defined by the specification.
+ * @param kr The right 128 bits of the key as defined by the specification. Only used with 192- and
+ * 256-bit key sizes.
+ * @param[out] schedule Location to store the expanded key schedule.
+ * @param parameters Parameters for this run of Camellia.
+ */
 void camellia_expand_keys(const uint64_t ka[2], const uint64_t kb[2], const uint64_t kl[2],
                           const uint64_t kr[2], CamelliaKeySchedule* schedule,
                           CamelliaParameters parameters);
 
+/** @brief Helper to copy the S-boxes and expanded key schedule into shared memory.
+ *
+ * @param[out] shared_sboxes Shared memory location to store the S-boxes.
+ * @param[out] shared_schedule Shared memory location to store the expanded key schedule.
+ * @param sboxes Location to read the S-boxes from.
+ * @param schedule Location to read the expanded key schedule from.
+ * @param parameters Parameters for this run of Camellia.
+ */
 __device__ void camellia_load_shared_memory(CamelliaSboxes* shared_sboxes,
                                             CamelliaKeySchedule* shared_schedule,
                                             const CamelliaSboxes* sboxes,
                                             const CamelliaKeySchedule* schedule,
                                             CamelliaParameters parameters);
 
+/** @brief Implementation of the Camellia F-function, accessible from both host and device. For
+ * more information, see RFC 3713 Section 2.4.1.
+ *
+ * @param f_in 64-bit input data for the function.
+ * @param ke 64-bit subkey.
+ * @param sboxes Memory location of S-boxes to use for substitution.
+ * @return 64-bit output data.
+ */
 __host__ __device__ uint64_t camellia_f(uint64_t f_in, uint64_t ke, const CamelliaSboxes* sboxes);
 
+/** @brief Implementation of the Camellia FL-function. For more information, see RFC 3713
+ * Section 2.4.2.
+ *
+ * @param fl_in 64-bit input data for the function.
+ * @param ke 64-bit subkey.
+ * @return 64-bit output data.
+ */
 __device__ uint64_t camellia_fl(uint64_t fl_in, uint64_t ke);
 
+/** @brief Implementation of the FLINV-function, which is the inverse of the FL-function. For more
+ * information, see RFC 3713 Section 2.4.2.
+ *
+ * @param flinv_in 64-bit input data for the function.
+ * @param ke 64-bit subkey.
+ * @return 64-bit output data.
+ */
 __device__ uint64_t camellia_flinv(uint64_t flinv_in, uint64_t ke);
 
+/** @brief Perform standard Camellia encryption on the input data corresponding to this thread index
+ * using the provided S-boxes and key schedule. For more information, see RFC 3713 Sections 2.3.1
+ * & 2.3.2.
+ *
+ * @param input Plaintext to encrypt.
+ * @param[out] output Location to store the encrypted ciphertext.
+ * @param sboxes S-boxes to use for substitution.
+ * @param schedule Expanded key schedule to use during encryption.
+ * @param thread_idx Index of the thread that calls this function, used for indexing into the input
+ * and output arrays.
+ * @param parameters Parameters for this run of Camellia encryption.
+ */
 __device__ void camellia_encrypt(const uint8_t* input, uint8_t* output,
                                  const CamelliaSboxes* sboxes, const CamelliaKeySchedule* schedule,
                                  size_t thread_idx, CamelliaParameters parameters);
 
+/** @brief Perform standard 128-bit Camellia decryption on the input data corresponding to this
+ * thread index using the provided S-boxes and key schedule. For more information, see RFC 3713
+ * Section 2.3.3.
+ *
+ * @param input Ciphertext to decrypt.
+ * @param[out] output Location to store the decrypted plaintext.
+ * @param sboxes S-boxes to use for substitution.
+ * @param schedule Expanded key schedule to use during decryption.
+ * @param thread_idx Index of the thread that calls this function, used for indexing into the input
+ * and output arrays.
+ */
 __device__ void camellia_decrypt_128(const uint8_t* input, uint8_t* output,
                                      const CamelliaSboxes* sboxes,
                                      const CamelliaKeySchedule* schedule, size_t thread_idx);
 
+/** @brief Perform standard 192- or 256-bit Camellia decryption on the input data corresponding to
+ * this thread index using the provided S-boxes and key schedule. For more information, see RFC 3713
+ * Section 2.3.3.
+ *
+ * @param input Ciphertext to decrypt.
+ * @param[out] output Location to store the decrypted plaintext.
+ * @param sboxes S-boxes to use for substitution.
+ * @param schedule Expanded key schedule to use during decryption.
+ * @param thread_idx Index of the thread that calls this function, used for indexing into the input
+ * and output arrays.
+ */
 __device__ void camellia_decrypt(const uint8_t* input, uint8_t* output,
                                  const CamelliaSboxes* sboxes, const CamelliaKeySchedule* schedule,
                                  size_t thread_idx);
 
+/** @brief Perform Camellia-CTR encryption/decryption on the input data using the provided S-boxes,
+ * key schedule, and CTR-specific information.
+ *
+ * @param input Plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output Location to store the encrypted ciphertext or decrypted plaintext.
+ * @param sboxes S-boxes to use for substitution.
+ * @param schedule Expanded key schedule to use during encryption/decryption.
+ * @param nonce Nonce to use as input to the Camellia encryption/decryption for this block.
+ * @param counter Counter to use as input to the Camellia encryption/decryption for this block.
+ * @param parameters Parameters for this run of Camellia-CTR encryption/decryption.
+ */
+__device__ void camellia_ctr(const uint8_t* input, uint8_t* output, const CamelliaSboxes* sboxes,
+                             const CamelliaKeySchedule* schedule, uint64_t nonce, uint64_t counter,
+                             CamelliaParameters parameters);
+
+/** @brief Perform the entirety of Camellia-ECB encryption on the input data using shared memory
+ * arrays.
+ *
+ * @param input Plaintext to encrypt.
+ * @param[out] output Location to store the encrypted ciphertext.
+ * @param input_size Length of the plaintext in bytes.
+ * @param sbox S-boxes to use for substitution.
+ * @param round_keys Expanded key schedule to use during encryption.
+ * @param parameters Parameters for this run of Camellia-ECB encryption.
+ */
 __global__ void camellia_encrypt_ecb_kernel(const uint8_t* input, uint8_t* output,
                                             size_t input_size, const CamelliaSboxes* sboxes,
                                             const CamelliaKeySchedule* round_keys,
                                             CamelliaParameters parameters);
 
+/** @brief Perform the entirety of Camellia-ECB decryption on the input data using shared memory
+ * arrays.
+ *
+ * @param input Ciphertext to decrypt.
+ * @param[out] output Location to store the decrypted plaintext.
+ * @param input_size Length of the plaintext in bytes.
+ * @param sbox S-boxes to use for substitution.
+ * @param round_keys Expanded key schedule to use during decryption.
+ * @param parameters Parameters for this run of Camellia-ECB decryption.
+ */
 __global__ void camellia_decrypt_ecb_kernel(const uint8_t* input, uint8_t* output,
                                             size_t input_size, const CamelliaSboxes* sboxes,
                                             const CamelliaKeySchedule* round_keys,
                                             CamelliaParameters parameters);
 
-bool launch_camellia_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
+/** @brief Perform the entirety of Camellia-CTR encryption or decryption on the input data using
+ * shared memory arrays.
+ *
+ * @param input Plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output Location to store the encrypted ciphertext or decrpyted plaintext.
+ * @param input_size Length of the input plaintext/ciphertext in bytes.
+ * @param sboxes S-boxes to use for substitution.
+ * @param schedule Expanded key schedule to use during encryption/decryption.
+ * @param nonce Nonce to use as input to the cipher.
+ * @param ctr_start The counter starting value for this input.
+ * @param parameters Parameters for this run of Camellia-CTR encryption/decryption.
+ */
+__global__ void camellia_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
+                                    const CamelliaSboxes* sboxes,
+                                    const CamelliaKeySchedule* schedule, uint64_t nonce,
+                                    uint64_t ctr_start, CamelliaParameters parameters);
+
+/** @brief Launch the Camellia-ECB kernel corresponding to this request. Handles all CUDA parameters
+ * as well as Camellia-specific parameters.
+ *
+ * @param request The packaged CryptoRequest containing all parsed command-line arguments.
+ * @param key The encryption key for this run of Camellia-ECB.
+ * @param input The plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output The encrypted ciphertext or decrypted plaintext.
+ * @param input_length The length of the input in bytes.
+ */
+void launch_camellia_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                          uint8_t* output, size_t input_length);
 
-bool launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
+/** @brief Launch the Camellia-CTR kernel corresponding to this request. Handles all CUDA parameters
+ * as well as Camellia-specific parameters.
+ *
+ * @param request The packaged CryptoRequest containing all parsed command-line arguments.
+ * @param key The encryption key for this run of Camellia-CTR.
+ * @param iv The packaged nonce + counter for the first block to encrypt or decrypt.
+ * @param input The plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output The encrypted ciphertext or decrypted plaintext.
+ * @param input_length The length of the input in bytes.
+ */
+void launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                          const uint8_t* input, uint8_t* output, size_t input_length);
+
 #endif

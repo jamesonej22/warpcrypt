@@ -377,86 +377,71 @@ __global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t inp
     }
 }
 
-bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
+void launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length) {
     AesParameters parameters(request);
 
     uint8_t round_keys[AES_MAX_TOTAL_KEY_SIZE];
     aes_expand_key(round_keys, key, parameters);
 
-    uint8_t* device_input;
-    uint8_t* device_output;
     uint8_t* device_round_keys;
     uint8_t* device_sbox;
-
-    cudaMalloc(&device_input, input_length);
-    cudaMalloc(&device_output, input_length);
     cudaMalloc(&device_round_keys, parameters.total_key_size);
     cudaMalloc(&device_sbox, AES_SBOX_SIZE);
-
     cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
 
-    switch (request.operation) {
-        case Operation::Encrypt:
-            cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
-            aes_encrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
-                device_input, device_output, input_length, device_sbox, device_round_keys,
-                parameters);
-            break;
-        case Operation::Decrypt:
-            cudaMemcpy(device_sbox, AES_INVERSE_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
-            aes_decrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
-                device_input, device_output, input_length, device_sbox, device_round_keys,
-                parameters);
-            break;
+    if (request.operation == Operation::Encrypt) {
+        cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
+    } else {
+        cudaMemcpy(device_sbox, AES_INVERSE_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
     }
 
-    cudaDeviceSynchronize();
-    cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);
+    launch_with_streams(
+        request.num_streams, input_length, input, output,
+        [&](cudaStream_t stream, uint8_t* device_in, uint8_t* device_out, size_t size,
+            size_t /*offset*/) {
+            if (request.operation == Operation::Encrypt) {
+                aes_encrypt_ecb_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                    device_in, device_out, size, device_sbox, device_round_keys, parameters);
+            } else {
+                aes_decrypt_ecb_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                    device_in, device_out, size, device_sbox, device_round_keys, parameters);
+            }
+        });
 
+    cudaDeviceSynchronize();
     cudaFree(device_sbox);
     cudaFree(device_round_keys);
-    cudaFree(device_output);
-    cudaFree(device_input);
-    return true;
 }
 
-bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
+void launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                     const uint8_t* input, uint8_t* output, size_t input_length) {
     AesParameters parameters(request);
 
     uint8_t round_keys[AES_MAX_TOTAL_KEY_SIZE];
     aes_expand_key(round_keys, key, parameters);
 
-    // Extract nonce and counter start from IV
+    // Extract nonce + counter
     uint64_t nonce = load_be64(iv);
     uint64_t ctr_start = load_be64(iv + 8);
 
-    uint8_t* device_input;
-    uint8_t* device_output;
     uint8_t* device_round_keys;
     uint8_t* device_sbox;
-
-    cudaMalloc(&device_input, input_length);
-    cudaMalloc(&device_output, input_length);
     cudaMalloc(&device_round_keys, parameters.total_key_size);
     cudaMalloc(&device_sbox, AES_SBOX_SIZE);
-
     cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
-
     cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
-    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
-    aes_ctr_kernel<<<request.num_blocks, request.block_size>>>(
-        device_input, device_output, input_length, device_sbox, device_round_keys, nonce, ctr_start,
-        parameters);
 
-    cudaDeviceSynchronize();
-    cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);
+    launch_with_streams(request.num_streams, input_length, input, output,
+                        [&](cudaStream_t stream, uint8_t* device_in, uint8_t* device_out,
+                            size_t size, size_t offset) {
+                            size_t block_offset = offset / 16;
+
+                            aes_ctr_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                                device_in, device_out, size, device_sbox, device_round_keys, nonce,
+                                ctr_start + block_offset, parameters);
+                        });
 
     cudaFree(device_sbox);
     cudaFree(device_round_keys);
-    cudaFree(device_output);
-    cudaFree(device_input);
-    return true;
 }

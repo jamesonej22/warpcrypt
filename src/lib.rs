@@ -64,16 +64,14 @@ mod ffi {
         include!("warpcrypt/cuda/include/warpcrypt.cuh");
 
         /// Main CUDA driver function for performing a cryptographic operation. All necessary
-        /// parameters to complete the operation are defined and passed in here.
-        ///
-        /// # Example
+        /// parameters to complete the operation are passed in here.
         fn execute_crypto(
             request: &CryptoRequest,
             key: &[u8],
             iv: &[u8],
             input: &[u8],
             output: &mut [u8],
-        ) -> bool;
+        );
     }
 }
 
@@ -291,7 +289,7 @@ mod test {
             Operation::Decrypt => (ciphertext.as_ref(), AES_PLAINTEXT.as_ref()),
             _ => unimplemented!(),
         };
-        assert!(execute_crypto(&request, key, &[0u8], input, &mut output));
+        execute_crypto(&request, key, &[0u8], input, &mut output);
         assert_eq!(expected, &output);
     }
 
@@ -322,13 +320,7 @@ mod test {
             Operation::Decrypt => (ciphertext.as_ref(), AES_PLAINTEXT.as_ref()),
             _ => unimplemented!(),
         };
-        assert!(execute_crypto(
-            &request,
-            key,
-            &AES_CTR_IV,
-            input,
-            &mut output
-        ));
+        execute_crypto(&request, key, &AES_CTR_IV, input, &mut output);
         assert_eq!(expected, &output);
     }
 
@@ -359,7 +351,7 @@ mod test {
             Operation::Decrypt => (ciphertext.as_ref(), CAMELLIA_PLAINTEXT.as_ref()),
             _ => unimplemented!(),
         };
-        assert!(execute_crypto(&request, key, &[0u8], input, &mut output));
+        execute_crypto(&request, key, &[0u8], input, &mut output);
         assert_eq!(expected, &output);
     }
 
@@ -391,7 +383,7 @@ mod test {
             Operation::Decrypt => (ciphertext.as_ref(), CAMELLIA_CTR_PLAINTEXT.as_ref()),
             _ => unimplemented!(),
         };
-        assert!(execute_crypto(&request, key, iv, input, &mut output));
+        execute_crypto(&request, key, iv, input, &mut output);
         assert_eq!(expected, &output);
     }
 }

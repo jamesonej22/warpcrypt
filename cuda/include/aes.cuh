@@ -104,13 +104,17 @@ struct AesParameters {
  *
  * @param[out] round_keys Expanded key to be used for encryption.
  * @param key Provided key before expansion.
+ * @param parameters Parameters for this run of AES.
  */
 void aes_expand_key(uint8_t* round_keys, const uint8_t* key, AesParameters parameters);
 
-/** @brief Helper to copy the global memory sbox and round keys into shared memory.
+/** @brief Helper to copy the S-box and round keys into shared memory.
  *
- * @param[out] shared_sbox Shared memory location to store the sbox.
+ * @param[out] shared_sbox Shared memory location to store the S-box.
  * @param[out] shared_round_keys Shared memory location to store the round keys.
+ * @param sbox Location to read the S-box from.
+ * @param round_keys Location to read the round keys from.
+ * @param parameters Parameters for this run of AES.
  */
 __device__ void aes_load_shared_memory(uint8_t* shared_sbox, uint8_t* shared_round_keys,
                                        const uint8_t* sbox, const uint8_t* round_keys,
@@ -169,7 +173,7 @@ __device__ void aes_inverse_mix_columns(uint8_t* state);
 __device__ void aes_add_round_key(uint8_t* state, const uint8_t* round_keys, int round);
 
 /** @brief Perform standard AES encryption on the input data corresponding to this thread index
- * using the provided sbox and round keys.
+ * using the provided S-box and round keys.
  *
  * @param input Plaintext to encrypt.
  * @param[out] output Location to store the encrypted ciphertext.
@@ -177,13 +181,13 @@ __device__ void aes_add_round_key(uint8_t* state, const uint8_t* round_keys, int
  * @param round_keys Expanded keys to use during encryption.
  * @param thread_idx Index of the thread that calls this function, used for indexing into the input
  * and output arrays.
- * @param parameters Parameters for this run of AES-ECB encryption.
+ * @param parameters Parameters for this run of AES encryption.
  */
 __device__ void aes_encrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                             const uint8_t* round_keys, size_t thread_idx, AesParameters parameters);
 
 /** @brief Perform standard AES decryption on the input data corresponding to this thread index
- * using the provided sbox and round keys.
+ * using the provided S-box and round keys.
  *
  * @param input Ciphertext to decrypt.
  * @param[out] output Location to store the decrypted plaintext.
@@ -191,18 +195,18 @@ __device__ void aes_encrypt(const uint8_t* input, uint8_t* output, const uint8_t
  * @param round_keys Expanded keys to use during decryption.
  * @param thread_idx Index of the thread that calls this function, used for indexing into the input
  * and output arrays.
- * @param parameters Parameters for this run of AES-ECB decryption.
+ * @param parameters Parameters for this run of AES decryption.
  */
 __device__ void aes_decrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                             const uint8_t* round_keys, size_t thread_idx, AesParameters parameters);
 
-/** @brief Perform AES-CTR encryption/decryption on the input data using the provided sbox, round
+/** @brief Perform AES-CTR encryption/decryption on the input data using the provided S-box, round
  * keys, and CTR-specific information.
  *
- * @param input Plaintext to encrypt or Ciphertext to decrypt.
- * @param[out] output Location to store the encrypted ciphertext pr decrypted plaintext.
+ * @param input Plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output Location to store the encrypted ciphertext or decrypted plaintext.
  * @param sbox Rijndael S-box to use for SubBytes.
- * @param round_keys Expanded keys to use during encryption.
+ * @param round_keys Expanded keys to use during encryption/decryption.
  * @param nonce Nonce to use as input to the AES encryption/decryption for this block.
  * @param counter Counter to use as input to the AES encryption/decryption for this block.
  * @param parameters Parameters for this run of AES-CTR encryption/decryption.
@@ -237,13 +241,17 @@ __global__ void aes_decrypt_ecb_kernel(const uint8_t* input, uint8_t* output, si
                                        const uint8_t* sbox, const uint8_t* round_keys,
                                        AesParameters parameters);
 
-/** @brief Perform the entirety of AES-CTR encryption on the input data using shared memory arrays,
- * copied from constant memory.
+/** @brief Perform the entirety of AES-CTR encryption or decryption on the input data using shared
+ * memory arrays.
  *
- * @param input Plaintext to encrypt.
- * @param[out] output Location to store the encrypted ciphertext.
- * @param input_size Length of the plaintext in bytes.
+ * @param input Plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output Location to store the encrypted ciphertext or decrpyted plaintext.
+ * @param input_size Length of the input plaintext/ciphertext in bytes.
+ * @param sbox Rijndael S-box to use for SubBytes.
+ * @param round_keys Expanded keys to use during encryption/decryption.
+ * @param nonce Nonce to use as input to the cipher.
  * @param ctr_start The counter starting value for this input.
+ * @param parameters Parameters for this run of AES-CTR encryption/decryption.
  */
 __global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
                                const uint8_t* sbox, const uint8_t* round_keys, uint64_t nonce,
@@ -258,7 +266,7 @@ __global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t inp
  * @param[out] output The encrypted ciphertext or decrypted plaintext.
  * @param input_length The length of the input in bytes.
  */
-bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
+void launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length);
 
 /** @brief Launch the AES-CTR kernel corresponding to this request. Handles all CUDA parameters as
@@ -271,6 +279,7 @@ bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint
  * @param[out] output The encrypted ciphertext or decrypted plaintext.
  * @param input_length The length of the input in bytes.
  */
-bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
+void launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                     const uint8_t* input, uint8_t* output, size_t input_length);
+
 #endif

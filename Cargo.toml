@@ -6,6 +6,10 @@ version = "0.1.0"
 [lib]
 doctest = false
 
+[profile.release]
+codegen-units = 1
+lto = true
+
 [[bin]]
 name = "warpcrypt"
 path = "src/main.rs"

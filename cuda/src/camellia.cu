@@ -1,4 +1,8 @@
-
+/** @file camellia.cu
+ * @author Eric Jameson
+ * @brief Declaration of constants and functions used in Camellia. All constants and
+ * functions are described in the Camellia RFC: https://www.rfc-editor.org/rfc/rfc3713
+ */
 
 #include <cstdint>
 #include <cstring>
@@ -445,51 +449,39 @@ __global__ void camellia_ctr_kernel(const uint8_t* input, uint8_t* output, size_
     }
 }
 
-bool launch_camellia_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
+void launch_camellia_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                          uint8_t* output, size_t input_length) {
     CamelliaParameters parameters(request);
     CamelliaKeySchedule schedule;
     camellia_generate_keys(key, &schedule, &CAMELLIA_HOST_SBOXES, parameters);
 
-    uint8_t* device_input;
-    uint8_t* device_output;
     CamelliaSboxes* device_sboxes;
     CamelliaKeySchedule* device_schedule;
-
-    cudaMalloc(&device_input, input_length);
-    cudaMalloc(&device_output, input_length);
     cudaMalloc(&device_sboxes, sizeof(CamelliaSboxes));
     cudaMalloc(&device_schedule, sizeof(CamelliaKeySchedule));
-
     cudaMemcpy(device_schedule, &schedule, sizeof(CamelliaKeySchedule), cudaMemcpyHostToDevice);
     cudaMemcpy(device_sboxes, &CAMELLIA_HOST_SBOXES, sizeof(CamelliaSboxes),
                cudaMemcpyHostToDevice);
-    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
 
-    switch (request.operation) {
-        case Operation::Encrypt:
-            camellia_encrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
-                device_input, device_output, input_length, device_sboxes, device_schedule,
-                parameters);
-            break;
-        case Operation::Decrypt:
-            camellia_decrypt_ecb_kernel<<<request.num_blocks, request.block_size>>>(
-                device_input, device_output, input_length, device_sboxes, device_schedule,
-                parameters);
-            break;
-    }
+    launch_with_streams(
+        request.num_streams, input_length, input, output,
+        [&](cudaStream_t stream, uint8_t* device_in, uint8_t* device_out, size_t size,
+            size_t /*offset*/) {
+            if (request.operation == Operation::Encrypt) {
+                camellia_encrypt_ecb_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                    device_in, device_out, size, device_sboxes, device_schedule, parameters);
+            } else {
+                camellia_decrypt_ecb_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                    device_in, device_out, size, device_sboxes, device_schedule, parameters);
+            }
+        });
 
     cudaDeviceSynchronize();
-    cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);
-
     cudaFree(device_schedule);
     cudaFree(device_sboxes);
-    cudaFree(device_output);
-    cudaFree(device_input);
-    return true;
 }
 
-bool launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
+void launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                          const uint8_t* input, uint8_t* output, size_t input_length) {
     CamelliaParameters parameters(request);
     CamelliaKeySchedule schedule;
@@ -499,31 +491,26 @@ bool launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const
     uint64_t nonce = load_be64(iv);
     uint64_t ctr_start = load_be64(iv + 8);
 
-    uint8_t* device_input;
-    uint8_t* device_output;
     CamelliaSboxes* device_sboxes;
     CamelliaKeySchedule* device_schedule;
-
-    cudaMalloc(&device_input, input_length);
-    cudaMalloc(&device_output, input_length);
     cudaMalloc(&device_sboxes, sizeof(CamelliaSboxes));
     cudaMalloc(&device_schedule, sizeof(CamelliaKeySchedule));
-
     cudaMemcpy(device_schedule, &schedule, sizeof(CamelliaKeySchedule), cudaMemcpyHostToDevice);
     cudaMemcpy(device_sboxes, &CAMELLIA_HOST_SBOXES, sizeof(CamelliaSboxes),
                cudaMemcpyHostToDevice);
-    cudaMemcpy(device_input, input, input_length, cudaMemcpyHostToDevice);
 
-    camellia_ctr_kernel<<<request.num_blocks, request.block_size>>>(
-        device_input, device_output, input_length, device_sboxes, device_schedule, nonce, ctr_start,
-        parameters);
+    launch_with_streams(
+        request.num_streams, input_length, input, output,
+        [&](cudaStream_t stream, uint8_t* device_in, uint8_t* device_out, size_t size,
+            size_t offset) {
+            size_t block_offset = offset / 16;
+
+            camellia_ctr_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                device_in, device_out, size, device_sboxes, device_schedule, nonce,
+                ctr_start + block_offset, parameters);
+        });
 
     cudaDeviceSynchronize();
-    cudaMemcpy(output, device_output, input_length, cudaMemcpyDeviceToHost);
-
     cudaFree(device_schedule);
     cudaFree(device_sboxes);
-    cudaFree(device_output);
-    cudaFree(device_input);
-    return true;
 }
