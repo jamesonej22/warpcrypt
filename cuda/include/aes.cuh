@@ -1,9 +1,8 @@
-/**
- * @file aes.cuh
+/** @file aes.cuh
  * @author Eric Jameson
- * @brief Declaration of constants and functions used in the Advanced Encryption Standard (AES).
- * All constants (with the exception of our static key and CTR-mode nonce) and functions are
- * described on Wikipedia: https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
+ * @brief Declaration of constants and functions used in the Advanced Encryption
+ * Standard (AES). All constants and functions are described on Wikipedia:
+ * https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
  */
 
 #ifndef __WARPCRYPT_AES_CUH
@@ -13,7 +12,7 @@
 
 #include "warpcrypt.cuh"
 
-/** @brief Number of elements in the state operated on during encryption. */
+/** @brief Number of elements in the state operated on during encryption and decryption. */
 #define AES_STATE_SIZE 16
 /** @brief Number of rows and columns in the state, used only for loop iteration. */
 #define AES_STATE_DIMENSION 4
@@ -23,14 +22,23 @@
 #define BITS_PER_BYTE 8
 /** @brief Number of bytes in a 32-bit word, used in key expansion. */
 #define WORD_SIZE 4
+/** @brief Constant number of bytes in a 128-bit AES key. */
 #define AES_KEY_SIZE_128 16
+/** @brief Number of rounds in 128-bit encryption and decryption. */
 #define AES_NUM_ROUNDS_128 10
+/** @brief Constant number of bytes in a 192-bit AES key. */
 #define AES_KEY_SIZE_192 24
+/** @brief Number of rounds in 192-bit encryption and decryption. */
 #define AES_NUM_ROUNDS_192 12
+/** @brief Constant number of bytes in a 256-bit AES key. */
 #define AES_KEY_SIZE_256 32
+/** @brief Number of rounds in 256-bit encryption and decryption. */
 #define AES_NUM_ROUNDS_256 14
+/** @brief Maximum key size amongst all implemented key sizes. */
 #define AES_MAX_KEY_SIZE AES_KEY_SIZE_256
+/** @brief Maximum number of rounds amongst all implemented key sizes. */
 #define AES_MAX_ROUNDS AES_NUM_ROUNDS_256
+/** @brief Maximum possible expanded key size amongst all implemented key sizes. */
 #define AES_MAX_TOTAL_KEY_SIZE (AES_STATE_SIZE * AES_MAX_ROUNDS) + AES_STATE_SIZE
 
 /** @brief Rijndael S-box used for byte substitution in the SubBytes step of encryption. */
@@ -56,6 +64,9 @@ const uint8_t AES_SBOX[AES_SBOX_SIZE] = {
 const uint32_t AES_ROUND_CONSTANTS[AES_MAX_ROUNDS + 1] = {
     0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6c, 0xd8, 0xab, 0x4d};
 
+/** @brief Inverse Rijndael S-box used for byte substitution in the InverseSubBytes step of
+ * decryption.
+ */
 const uint8_t AES_INVERSE_SBOX[256] = {
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -75,16 +86,20 @@ const uint8_t AES_INVERSE_SBOX[256] = {
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
 };
 
+/** @brief Struct used to contain all relevant AES parameters for a particular request. */
 struct AesParameters {
+    /** @brief Key size in bytes. */
     uint32_t key_size;
+    /** @brief Expanded key size in bytes. */
     uint32_t total_key_size;
+    /** @brief Number of rounds to use in encryption or decryption. */
     int num_rounds;
 
+    /** @brief Constructor of an AesParameters object from a given CryptoRequest. */
     AesParameters(const CryptoRequest& request);
 };
 
-/**
- * @brief Perform key expansion on the provided key. For more information, see:
+/** @brief Perform key expansion on the provided key. For more information, see:
  * https://en.wikipedia.org/wiki/AES_key_schedule
  *
  * @param[out] round_keys Expanded key to be used for encryption.
@@ -92,8 +107,7 @@ struct AesParameters {
  */
 void aes_expand_key(uint8_t* round_keys, const uint8_t* key, AesParameters parameters);
 
-/**
- * @brief Helper to copy the global memory sbox and round keys into shared memory.
+/** @brief Helper to copy the global memory sbox and round keys into shared memory.
  *
  * @param[out] shared_sbox Shared memory location to store the sbox.
  * @param[out] shared_round_keys Shared memory location to store the round keys.
@@ -102,8 +116,7 @@ __device__ void aes_load_shared_memory(uint8_t* shared_sbox, uint8_t* shared_rou
                                        const uint8_t* sbox, const uint8_t* round_keys,
                                        AesParameters parameters);
 
-/**
- * @brief Perform the SubBytes step of encryption. For more information, see:
+/** @brief Perform the SubBytes step of encryption. For more information, see:
  * https://en.wikipedia.org/wiki/Rijndael_S-box
  *
  * @param[in,out] state The current state to operate on.
@@ -111,18 +124,20 @@ __device__ void aes_load_shared_memory(uint8_t* shared_sbox, uint8_t* shared_rou
  */
 __device__ void aes_sub_bytes(uint8_t* state, const uint8_t* sbox);
 
-/**
- * @brief Perform the ShiftRows step of encryption. For more information, see:
+/** @brief Perform the ShiftRows step of encryption. For more information, see:
  * https://en.wikipedia.org/wiki/Advanced_Encryption_Standard#The_ShiftRows_step
  *
  * @param[in,out] state The current state to operate on.
  */
 __device__ void aes_shift_rows(uint8_t* state);
 
+/** @brief Perform the InverseShiftRows step of decryption. This is the inverse of ShiftRows.
+ *
+ * @param[in,out] state The current state to operate on.
+ */
 __device__ void aes_inverse_shift_rows(uint8_t* state);
 
-/**
- * @brief Multiply two elements of GF(2^8). Adapted from
+/** @brief Multiply two elements of GF(2^8). Adapted from
  * https://en.wikipedia.org/wiki/Rijndael_MixColumns#Implementation_example
  *
  * @param a The first multiplicand.
@@ -131,18 +146,20 @@ __device__ void aes_inverse_shift_rows(uint8_t* state);
  */
 __device__ uint8_t aes_galois_multiplication(uint8_t a, uint8_t b);
 
-/**
- * @brief Perform the MixColumns step of encryption. For more information, see:
+/** @brief Perform the MixColumns step of encryption. For more information, see:
  * https://en.wikipedia.org/wiki/Rijndael_MixColumns
  *
  * @param[in,out] state The current state to operate on.
  */
 __device__ void aes_mix_columns(uint8_t* state);
 
+/** @brief Perform the InverseMixColumns step of decryption. This is the inverse of MixColumns.
+ *
+ * @param[in,out] state The current state to operate on.
+ */
 __device__ void aes_inverse_mix_columns(uint8_t* state);
 
-/**
- * @brief Perform the AddRoundKey step of encryption. For more information, see:
+/** @brief Perform the AddRoundKey step of encryption. For more information, see:
  * https://en.wikipedia.org/wiki/Advanced_Encryption_Standard#The_AddRoundKey
  *
  * @param[in,out] state The current state to operate on.
@@ -151,54 +168,76 @@ __device__ void aes_inverse_mix_columns(uint8_t* state);
  */
 __device__ void aes_add_round_key(uint8_t* state, const uint8_t* round_keys, int round);
 
-/**
- * @brief Perform the standard AES encryption on the input data corresponding to this thread index
+/** @brief Perform standard AES encryption on the input data corresponding to this thread index
  * using the provided sbox and round keys.
  *
  * @param input Plaintext to encrypt.
  * @param[out] output Location to store the encrypted ciphertext.
- * @param sbox Rijndael S-Box to use for SubBytes.
+ * @param sbox Rijndael S-box to use for SubBytes.
  * @param round_keys Expanded keys to use during encryption.
  * @param thread_idx Index of the thread that calls this function, used for indexing into the input
  * and output arrays.
+ * @param parameters Parameters for this run of AES-ECB encryption.
  */
 __device__ void aes_encrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                             const uint8_t* round_keys, size_t thread_idx, AesParameters parameters);
 
+/** @brief Perform standard AES decryption on the input data corresponding to this thread index
+ * using the provided sbox and round keys.
+ *
+ * @param input Ciphertext to decrypt.
+ * @param[out] output Location to store the decrypted plaintext.
+ * @param sbox Rijndael Inverse S-box to use for SubBytes.
+ * @param round_keys Expanded keys to use during decryption.
+ * @param thread_idx Index of the thread that calls this function, used for indexing into the input
+ * and output arrays.
+ * @param parameters Parameters for this run of AES-ECB decryption.
+ */
 __device__ void aes_decrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                             const uint8_t* round_keys, size_t thread_idx, AesParameters parameters);
-/**
- * @brief Perform AES-CTR encryption on the input data using the provided sbox, round keys, and
- * CTR-specific information.
+
+/** @brief Perform AES-CTR encryption/decryption on the input data using the provided sbox, round
+ * keys, and CTR-specific information.
  *
- * @param input Plaintext to encrypt.
- * @param[out] output Location to store the encrypted ciphertext.
- * @param sbox Rijndael S-Box to use for SubBytes.
+ * @param input Plaintext to encrypt or Ciphertext to decrypt.
+ * @param[out] output Location to store the encrypted ciphertext pr decrypted plaintext.
+ * @param sbox Rijndael S-box to use for SubBytes.
  * @param round_keys Expanded keys to use during encryption.
- * @param nonce Nonce to use as input to the AES encryption for this block.
- * @param counter Counter to use as input to the AES encryption for this block.
+ * @param nonce Nonce to use as input to the AES encryption/decryption for this block.
+ * @param counter Counter to use as input to the AES encryption/decryption for this block.
+ * @param parameters Parameters for this run of AES-CTR encryption/decryption.
  */
 __device__ void aes_ctr(const uint8_t* input, uint8_t* output, const uint8_t* sbox,
                         const uint8_t* round_keys, uint64_t nonce, uint64_t counter,
                         AesParameters parameters);
 
-/**
- * @brief Perform the entirety of AES-ECB encryption on the input data using shared memory
- * arrays, copied from global memory.
+/** @brief Perform the entirety of AES-ECB encryption on the input data using shared memory arrays.
  *
  * @param input Plaintext to encrypt.
  * @param[out] output Location to store the encrypted ciphertext.
  * @param input_size Length of the plaintext in bytes.
+ * @param sbox Rijndael S-box to use for SubBytes.
+ * @param round_keys Expanded keys to use during encryption.
+ * @param parameters Parameters for this run of AES-ECB encryption.
  */
 __global__ void aes_encrypt_ecb_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
                                        const uint8_t* sbox, const uint8_t* round_keys,
                                        AesParameters parameters);
 
+/** @brief Perform the entirety of AES-ECB decryption on the input data using shared memory arrays.
+ *
+ * @param input Ciphertext to decrypt.
+ * @param[out] output Location to store the decrypted plaintext.
+ * @param input_size Length of the ciphertext in bytes.
+ * @param sbox Inverse Rijndael S-box to use for SubBytes.
+ * @param round_keys Expanded keys to use during decryption.
+ * @param parameters Parameters for this run of AES-ECB decryption.
+ */
 __global__ void aes_decrypt_ecb_kernel(const uint8_t* input, uint8_t* output, size_t input_size,
                                        const uint8_t* sbox, const uint8_t* round_keys,
                                        AesParameters parameters);
-/**
- * @brief Perform the entirety of AES-CTR encryption on the input data using shared memory arrays,
+
+/** @brief Perform the entirety of AES-CTR encryption on the input data using shared memory arrays,
  * copied from constant memory.
  *
  * @param input Plaintext to encrypt.
@@ -210,9 +249,28 @@ __global__ void aes_ctr_kernel(const uint8_t* input, uint8_t* output, size_t inp
                                const uint8_t* sbox, const uint8_t* round_keys, uint64_t nonce,
                                uint64_t ctr_start, AesParameters parameters);
 
+/** @brief Launch the AES-ECB kernel corresponding to this request. Handles all CUDA parameters as
+ * well as AES-specific parameters.
+ *
+ * @param request The packaged CryptoRequest containing all parsed command-line arguments.
+ * @param key The encryption key for this run of AES-ECB.
+ * @param input The plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output The encrypted ciphertext or decrypted plaintext.
+ * @param input_length The length of the input in bytes.
+ */
 bool launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint8_t* input,
                     uint8_t* output, size_t input_length);
 
+/** @brief Launch the AES-CTR kernel corresponding to this request. Handles all CUDA parameters as
+ * well as AES-specific parameters.
+ *
+ * @param request The packaged CryptoRequest containing all parsed command-line arguments.
+ * @param key The encryption key for this run of AES-CTR.
+ * @param iv The packaged nonce + counter for the first block to encrypt or decrypt.
+ * @param input The plaintext to encrypt or ciphertext to decrypt.
+ * @param[out] output The encrypted ciphertext or decrypted plaintext.
+ * @param input_length The length of the input in bytes.
+ */
 bool launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint8_t* iv,
                     const uint8_t* input, uint8_t* output, size_t input_length);
 #endif

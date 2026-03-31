@@ -1,8 +1,8 @@
-/**
- * @file aes.cu
+/** @file aes.cu
  * @author Eric Jameson
- * @brief Implementation of functions used in the Advanced Encryption Standard (AES). All functions
- * are described on Wikipedia: https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
+ * @brief Implementation of functions used in the Advanced Encryption Standard
+ * (AES). All functions are described on Wikipedia:
+ * https://en.wikipedia.org/wiki/Advanced_Encryption_Standard
  */
 
 #include <cstdint>
@@ -237,21 +237,6 @@ __device__ void aes_gcm_multiplication(const uint8_t* x, const uint8_t* y, uint8
         }
     }
     std::memcpy(output, z, AES_STATE_SIZE);
-}
-
-__device__ void aes_ghash(const uint8_t* h, const uint8_t* x, size_t len, uint8_t* output) {
-    uint8_t y[AES_STATE_SIZE] = {0};
-    uint8_t tmp[AES_STATE_SIZE];
-
-    size_t num_blocks = len / AES_STATE_SIZE;
-    for (size_t i = 0; i < num_blocks; i++) {
-        for (int j = 0; j < AES_STATE_SIZE; j++) {
-            y[j] ^= x[i * AES_STATE_SIZE + j];
-        }
-        aes_gcm_multiplication(y, h, tmp);
-        std::memcpy(y, tmp, AES_STATE_SIZE);
-    }
-    std::memcpy(output, y, AES_STATE_SIZE);
 }
 
 __device__ void aes_encrypt(const uint8_t* input, uint8_t* output, const uint8_t* sbox,

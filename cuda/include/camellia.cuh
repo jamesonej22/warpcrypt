@@ -1,27 +1,49 @@
+/** @file camellia.cuh
+ * @author Eric Jameson
+ * @brief Declaration of constants and functions used in Camellia. All constants and
+ * functions are described in the Camellia RFC: https://www.rfc-editor.org/rfc/rfc3713
+ */
+
 #ifndef __WARPCRYPT_CAMELLIA_CUH
 #define __WARPCRYPT_CAMELLIA_CUH
 
 #include "warpcrypt.cuh"
 
+/** @brief Number of elements in the state operated on during encryption and decryption. */
 #define CAMELLIA_STATE_SIZE 16
+/** @brief Constant number of bytes in a 128-bit Camellia key. */
 #define CAMELLIA_KEY_SIZE_128 16
+/** @brief Constant number of bytes in a 192-bit Camellia key. */
 #define CAMELLIA_KEY_SIZE_192 24
+/** @brief Constant number of bytes in a 256-bit Camellia key. */
 #define CAMELLIA_KEY_SIZE_256 32
+/** @brief Maximum number of rounds in Camellia encryption and decryption. */
 #define CAMELLIA_MAX_ROUNDS 24
+/** @brief Number of elements in the sigma array. */
 #define CAMELLIA_SIGMA_SIZE 6
+/** @brief Number of elements in each of the Camellia S-boxes. */
 #define CAMELLIA_SBOX_SIZE 256
+/** @brief Number of `kw` elements in the Camellia key schedule. */
 #define CAMELLIA_KW_SIZE 4
+/** @brief Maximum number of `ke` elements in the Camellia key schedule. */
 #define CAMELLIA_KE_MAX_SIZE 6
+/** @brief Total size of the Camellia key schedule. */
 #define CAMELLIA_SCHEDULE_SIZE CAMELLIA_MAX_ROUNDS + CAMELLIA_KW_SIZE + CAMELLIA_KE_MAX_SIZE
 
+/** @brief  Sigma values used during key expansion. */
 const uint64_t CAMELLIA_SIGMA[CAMELLIA_SIGMA_SIZE] = {0xa09e667f3bcc908b, 0xb67ae8584caa73b2,
                                                       0xc6ef372fe94f82be, 0x54ff53a5f1d36f1c,
                                                       0x10e527fade682d1d, 0xb05688c2b3e6c1fd};
 
+/** @brief Struct containing all S-boxes used during key expansion, encryption and decryption. */
 struct CamelliaSboxes {
+    /** @brief The first S-box. */
     uint8_t sbox1[CAMELLIA_SBOX_SIZE];
+    /** @brief The second S-box. */
     uint8_t sbox2[CAMELLIA_SBOX_SIZE];
+    /** @brief The third S-box. */
     uint8_t sbox3[CAMELLIA_SBOX_SIZE];
+    /** @brief The fourth S-box. */
     uint8_t sbox4[CAMELLIA_SBOX_SIZE];
 };
 
