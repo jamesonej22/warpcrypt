@@ -476,7 +476,6 @@ void launch_camellia_ecb(const CryptoRequest& request, const uint8_t* key, const
             }
         });
 
-    cudaDeviceSynchronize();
     cudaFree(device_schedule);
     cudaFree(device_sboxes);
 }
@@ -510,7 +509,6 @@ void launch_camellia_ctr(const CryptoRequest& request, const uint8_t* key, const
                 ctr_start + block_offset, parameters);
         });
 
-    cudaDeviceSynchronize();
     cudaFree(device_schedule);
     cudaFree(device_sboxes);
 }

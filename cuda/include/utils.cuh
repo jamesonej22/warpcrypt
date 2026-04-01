@@ -35,6 +35,7 @@ __host__ __device__ __forceinline__ void store_be64(uint8_t* p, uint64_t v) {
  * 64-bit halves.
  *
  * @param in Input 64-bit halves to rotate.
+ * @param n Number of bits to rotate.
  * @param[out] out Location to store the rotated halves.
  */
 __host__ __device__ __forceinline__ void rotl128(const uint64_t in[2], int n, uint64_t out[2]) {
@@ -54,17 +55,39 @@ __host__ __device__ __forceinline__ void rotl128(const uint64_t in[2], int n, ui
 
 /** @brief Templated helper to run any cryptographic operation with CUDA streams.
  *
- * @tparam F The cryptographic operation to run.
+ * @tparam F Functional form of the cryptographic operation.
  * @param num_streams The requested number of streams.
  * @param input_length The length of the full input in bytes.
- * @param input The loca
+ * @param input The input to this cryptographic operation.
+ * @param[out] output The location to store the output of this cryptographic operation.
+ * @param stream_function The per-stream function to run.
  */
 template <typename F>
 void launch_with_streams(size_t num_streams, size_t input_length, const uint8_t* input,
                          uint8_t* output, F&& stream_function) {
     num_streams = std::max<size_t>(1, num_streams);
-    size_t chunk_size = (input_length + num_streams - 1) / num_streams;
 
+    if (num_streams == 1) {
+        uint8_t* device_in;
+        uint8_t* device_out;
+        cudaMalloc(&device_in, input_length);
+        cudaMalloc(&device_out, input_length);
+
+        cudaMemcpy(device_in, input, input_length, cudaMemcpyHostToDevice);
+        stream_function(0, device_in, device_out, input_length, 0);
+        cudaDeviceSynchronize();
+        cudaMemcpy(output, device_out, input_length, cudaMemcpyDeviceToHost);
+
+        cudaFree(device_in);
+        cudaFree(device_out);
+        return;
+    }
+
+    cudaHostRegister((void*)input, input_length, cudaHostRegisterDefault);
+    cudaHostRegister(output, input_length, cudaHostRegisterDefault);
+
+    size_t min_chunk = 1 << 20;
+    size_t chunk_size = std::max(min_chunk, (input_length + num_streams - 1) / num_streams);
     std::vector<cudaStream_t> streams(num_streams);
     std::vector<uint8_t*> device_inputs(num_streams);
     std::vector<uint8_t*> device_outputs(num_streams);
@@ -79,25 +102,22 @@ void launch_with_streams(size_t num_streams, size_t input_length, const uint8_t*
         size_t offset = i * chunk_size;
         size_t current_size = std::min(chunk_size, input_length - offset);
         if (current_size == 0) break;
-
         cudaMemcpyAsync(device_inputs[i], input + offset, current_size, cudaMemcpyHostToDevice,
                         streams[i]);
-
         stream_function(streams[i], device_inputs[i], device_outputs[i], current_size, offset);
-
         cudaMemcpyAsync(output + offset, device_outputs[i], current_size, cudaMemcpyDeviceToHost,
                         streams[i]);
     }
 
     for (size_t i = 0; i < num_streams; i++) {
         cudaStreamSynchronize(streams[i]);
-    }
-
-    for (size_t i = 0; i < num_streams; i++) {
+        cudaStreamDestroy(streams[i]);
         cudaFree(device_inputs[i]);
         cudaFree(device_outputs[i]);
-        cudaStreamDestroy(streams[i]);
     }
+
+    cudaHostUnregister((void*)input);
+    cudaHostUnregister(output);
 }
 
 #endif

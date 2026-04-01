@@ -16,11 +16,11 @@ struct CryptoRequest;
 /** @brief Main CUDA driver function for performing a cryptographic operation. All necessary
  * parameters to complete the operation are passed in here.
  *
- * @param request
- * @param key
- * @param iv
- * @param input
- * @param[out] output
+ * @param request The fully packaged request for this cryptographic operation.
+ * @param key The key in bytes, passed in as a Rust slice.
+ * @param iv The initial value in bytes, passed in as a Rust slice.
+ * @param input The input in bytes, passed in as a Rust slice.
+ * @param[out] output The location to store the output, passed in as a mutable Rust slice.
  */
 void execute_crypto(const CryptoRequest& request, rust::Slice<const uint8_t> key,
                     rust::Slice<const uint8_t> iv, rust::Slice<const uint8_t> input,

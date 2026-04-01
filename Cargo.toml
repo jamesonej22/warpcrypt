@@ -15,6 +15,14 @@ name = "warpcrypt"
 path = "src/main.rs"
 test = false
 
+[[bench]]
+harness = false
+name = "aes_bench"
+
+[[bench]]
+harness = false
+name = "camellia_bench"
+
 [dependencies]
 cxx = "1.0"
 
@@ -22,4 +30,10 @@ cxx = "1.0"
 cxx-build = "1.0"
 
 [dev-dependencies]
+aes = "0.8"
+camellia = "0.1"
+cipher = "0.4"
+criterion = "0.8.2"
+ctr = "0.9"
+rand = "0.8"
 rstest = "0.26.1"

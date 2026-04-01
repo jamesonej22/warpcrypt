@@ -409,7 +409,6 @@ void launch_aes_ecb(const CryptoRequest& request, const uint8_t* key, const uint
             }
         });
 
-    cudaDeviceSynchronize();
     cudaFree(device_sbox);
     cudaFree(device_round_keys);
 }
@@ -421,7 +420,6 @@ void launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint
     uint8_t round_keys[AES_MAX_TOTAL_KEY_SIZE];
     aes_expand_key(round_keys, key, parameters);
 
-    // Extract nonce + counter
     uint64_t nonce = load_be64(iv);
     uint64_t ctr_start = load_be64(iv + 8);
 
@@ -432,15 +430,16 @@ void launch_aes_ctr(const CryptoRequest& request, const uint8_t* key, const uint
     cudaMemcpy(device_round_keys, round_keys, parameters.total_key_size, cudaMemcpyHostToDevice);
     cudaMemcpy(device_sbox, AES_SBOX, AES_SBOX_SIZE, cudaMemcpyHostToDevice);
 
-    launch_with_streams(request.num_streams, input_length, input, output,
-                        [&](cudaStream_t stream, uint8_t* device_in, uint8_t* device_out,
-                            size_t size, size_t offset) {
-                            size_t block_offset = offset / 16;
+    launch_with_streams(
+        request.num_streams, input_length, input, output,
+        [&request, &parameters, device_round_keys, device_sbox, nonce, ctr_start](
+            cudaStream_t stream, uint8_t* d_in, uint8_t* d_out, size_t size, size_t offset) {
+            size_t block_offset = offset / 16;
 
-                            aes_ctr_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
-                                device_in, device_out, size, device_sbox, device_round_keys, nonce,
-                                ctr_start + block_offset, parameters);
-                        });
+            aes_ctr_kernel<<<request.num_blocks, request.block_size, 0, stream>>>(
+                d_in, d_out, size, device_sbox, device_round_keys, nonce, ctr_start + block_offset,
+                parameters);
+        });
 
     cudaFree(device_sbox);
     cudaFree(device_round_keys);
