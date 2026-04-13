@@ -6,6 +6,10 @@ mod common;
 
 use common::{random_bytes, run_ctr, run_ecb_encrypt, warmup_gpu};
 
+type Aes128Ecb = ecb::Encryptor<Aes128>;
+type Aes192Ecb = ecb::Encryptor<Aes192>;
+type Aes256Ecb = ecb::Encryptor<Aes256>;
+
 type Aes128Ctr = ctr::Ctr128BE<Aes128>;
 type Aes192Ctr = ctr::Ctr128BE<Aes192>;
 type Aes256Ctr = ctr::Ctr128BE<Aes256>;
@@ -13,7 +17,7 @@ type Aes256Ctr = ctr::Ctr128BE<Aes256>;
 fn bench_gpu_aes_ecb(c: &mut Criterion) {
     let mut group = c.benchmark_group("gpu_aes_ecb");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let streams = [1, 2, 4, 8];
     let key_configs = [
         (KeySize::KeySize128, 16),
@@ -58,7 +62,7 @@ fn bench_gpu_aes_ecb(c: &mut Criterion) {
 fn bench_cpu_aes_ecb(c: &mut Criterion) {
     let mut group = c.benchmark_group("cpu_aes_ecb");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let key_configs = [(16, "128"), (24, "192"), (32, "256")];
 
     for &size in &sizes {
@@ -76,9 +80,9 @@ fn bench_cpu_aes_ecb(c: &mut Criterion) {
                 &size,
                 |b, _| {
                     b.iter(|| match key_len {
-                        16 => run_ecb_encrypt::<Aes128>(&key, &input, &mut output),
-                        24 => run_ecb_encrypt::<Aes192>(&key, &input, &mut output),
-                        32 => run_ecb_encrypt::<Aes256>(&key, &input, &mut output),
+                        16 => run_ecb_encrypt::<Aes128Ecb>(&key, &input, &mut output),
+                        24 => run_ecb_encrypt::<Aes192Ecb>(&key, &input, &mut output),
+                        32 => run_ecb_encrypt::<Aes256Ecb>(&key, &input, &mut output),
                         _ => unreachable!(),
                     })
                 },
@@ -91,7 +95,7 @@ fn bench_cpu_aes_ecb(c: &mut Criterion) {
 fn bench_gpu_aes_ctr(c: &mut Criterion) {
     let mut group = c.benchmark_group("gpu_aes_ctr");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let streams = [1, 2, 4, 8];
     let key_configs = [
         (KeySize::KeySize128, 16),
@@ -136,7 +140,7 @@ fn bench_gpu_aes_ctr(c: &mut Criterion) {
 fn bench_cpu_aes_ctr(c: &mut Criterion) {
     let mut group = c.benchmark_group("cpu_aes_ctr");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let key_configs = [(16, "128"), (24, "192"), (32, "256")];
 
     for &size in &sizes {

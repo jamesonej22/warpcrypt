@@ -6,6 +6,10 @@ mod common;
 
 use common::{random_bytes, run_ctr, run_ecb_encrypt, warmup_gpu};
 
+type Camellia128Ecb = ecb::Encryptor<Camellia128>;
+type Camellia192Ecb = ecb::Encryptor<Camellia192>;
+type Camellia256Ecb = ecb::Encryptor<Camellia256>;
+
 type Camellia128Ctr = ctr::Ctr128BE<Camellia128>;
 type Camellia192Ctr = ctr::Ctr128BE<Camellia192>;
 type Camellia256Ctr = ctr::Ctr128BE<Camellia256>;
@@ -58,7 +62,7 @@ fn bench_gpu_camellia_ecb(c: &mut Criterion) {
 fn bench_cpu_camellia_ecb(c: &mut Criterion) {
     let mut group = c.benchmark_group("cpu_camellia_ecb");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let key_configs = [(16, "128"), (24, "192"), (32, "256")];
 
     for &size in &sizes {
@@ -76,9 +80,9 @@ fn bench_cpu_camellia_ecb(c: &mut Criterion) {
                 &size,
                 |b, _| {
                     b.iter(|| match key_len {
-                        16 => run_ecb_encrypt::<Camellia128>(&key, &input, &mut output),
-                        24 => run_ecb_encrypt::<Camellia192>(&key, &input, &mut output),
-                        32 => run_ecb_encrypt::<Camellia256>(&key, &input, &mut output),
+                        16 => run_ecb_encrypt::<Camellia128Ecb>(&key, &input, &mut output),
+                        24 => run_ecb_encrypt::<Camellia192Ecb>(&key, &input, &mut output),
+                        32 => run_ecb_encrypt::<Camellia256Ecb>(&key, &input, &mut output),
                         _ => unreachable!(),
                     })
                 },
@@ -91,7 +95,7 @@ fn bench_cpu_camellia_ecb(c: &mut Criterion) {
 fn bench_gpu_camellia_ctr(c: &mut Criterion) {
     let mut group = c.benchmark_group("gpu_camellia_ctr");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let streams = [1, 2, 4, 8];
     let key_configs = [
         (KeySize::KeySize128, 16),
@@ -136,7 +140,7 @@ fn bench_gpu_camellia_ctr(c: &mut Criterion) {
 fn bench_cpu_camellia_ctr(c: &mut Criterion) {
     let mut group = c.benchmark_group("cpu_camellia_ctr");
 
-    let sizes = [1 << 20, 1 << 24, 1 << 28];
+    let sizes = [1 << 20, 1 << 24, 1 << 28, 1 << 30];
     let key_configs = [(16, "128"), (24, "192"), (32, "256")];
 
     for &size in &sizes {

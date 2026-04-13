@@ -1,5 +1,6 @@
 #include "aes.cuh"
 #include "camellia.cuh"
+#include "chacha.cuh"
 #include "warpcrypt.cuh"
 
 void execute_crypto(const CryptoRequest& request, rust::Slice<const uint8_t> key,
@@ -20,6 +21,9 @@ void execute_crypto(const CryptoRequest& request, rust::Slice<const uint8_t> key
             launch_camellia_ctr(request, key.data(), iv.data(), input.data(), output.data(),
                                 input.length());
             return;
+        case Algorithm::ChaCha20:
+            launch_chacha(request, key.data(), iv.data(), input.data(), output.data(),
+                          input.length());
         default:
             return;
     }

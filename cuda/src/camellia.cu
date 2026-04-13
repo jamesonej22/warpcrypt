@@ -1,7 +1,7 @@
 /** @file camellia.cu
  * @author Eric Jameson
- * @brief Declaration of constants and functions used in Camellia. All constants and
- * functions are described in the Camellia RFC: https://www.rfc-editor.org/rfc/rfc3713
+ * @brief Implementation of functions used in Camellia. All functions are described in the Camellia
+ * RFC: https://www.rfc-editor.org/rfc/rfc3713
  */
 
 #include <cstdint>

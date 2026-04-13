@@ -28,6 +28,8 @@ AesParameters::AesParameters(const CryptoRequest& request) {
             num_rounds = AES_NUM_ROUNDS_256;
             break;
         default:
+            key_size = AES_KEY_SIZE_128;
+            num_rounds = AES_NUM_ROUNDS_128;
             break;
     }
     total_key_size = AES_STATE_SIZE * (num_rounds + 1);

@@ -1,4 +1,5 @@
-use cipher::{BlockEncrypt, KeyInit, KeyIvInit, StreamCipher, generic_array::GenericArray};
+use cipher::{KeyInit, KeyIvInit, StreamCipher};
+use ecb::cipher::BlockModeEncrypt;
 use rand::RngCore;
 use warpcrypt::{Algorithm, CryptoRequest, KeySize, Operation, execute_crypto};
 
@@ -27,19 +28,20 @@ pub fn random_bytes(len: usize) -> Vec<u8> {
     v
 }
 
+#[allow(dead_code)]
 pub fn run_ecb_encrypt<C>(key: &[u8], input: &[u8], output: &mut [u8])
 where
-    C: BlockEncrypt + KeyInit,
+    C: KeyInit + BlockModeEncrypt,
 {
-    let cipher = C::new_from_slice(key).unwrap();
+    let mut cipher = C::new_from_slice(key).unwrap();
+    output.copy_from_slice(input);
 
-    for (i, chunk) in input.chunks(16).enumerate() {
-        let mut block = GenericArray::clone_from_slice(chunk);
-        cipher.encrypt_block(&mut block);
-        output[i * 16..(i + 1) * 16].copy_from_slice(&block);
+    for chunk in output.chunks_mut(16) {
+        cipher.encrypt_block(chunk.try_into().unwrap());
     }
 }
 
+#[allow(dead_code)]
 pub fn run_ctr<C>(key: &[u8], iv: &[u8], input: &[u8], output: &mut [u8])
 where
     C: KeyIvInit + StreamCipher,

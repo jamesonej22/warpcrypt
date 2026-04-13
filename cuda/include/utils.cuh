@@ -7,6 +7,16 @@
 #define __WARPCRYPT_UTILS_CUH
 
 #include <cstdint>
+#include <vector>
+
+/** @brief Utility to load an array of bytes into a big-endian unsigned 32-bit integer.
+ *
+ * @param p The array of bytes to load.
+ * @return The packed 32-bit integer.
+ */
+__host__ __device__ __forceinline__ uint32_t load_le32(const uint8_t* p) {
+    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
 
 /** @brief Utility to load an array of bytes into a big-endian unsigned 64-bit integer.
  *
@@ -30,6 +40,16 @@ __host__ __device__ __forceinline__ void store_be64(uint8_t* p, uint64_t v) {
         v >>= 8;
     }
 }
+
+/** @brief Utility to perform bitwise left rotation of a unsigned 32-bit integer.
+ *
+ * @param in Input integer to rotate.
+ * @param n Number of bits to rotate.
+ * @return The rotated integer.
+ */
+__host__ __device__ __forceinline__ uint32_t rotl32(uint32_t in, int n) {
+    return (in << n) | (in >> (32 - n));
+};
 
 /** @brief Utility to perform bitwise left rotation of a unsigned 128-bit integer, stored as 2
  * 64-bit halves.
