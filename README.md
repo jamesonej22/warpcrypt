@@ -1,6 +1,8 @@
 # WarpCrypt
 
-![WarpCrypt logo on transparent background](images/warpcrypt_512.png)
+<p align="center">
+  <img src="images/warpcrypt_512.png" alt="WarpCrypt Logo" />
+</p>
 
 **WarpCrypt** is a high-performance, CUDA-accelerated cryptography library and CLI.
 
