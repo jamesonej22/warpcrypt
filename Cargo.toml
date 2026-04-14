@@ -28,7 +28,10 @@ harness = false
 name = "chacha_bench"
 
 [dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.6.0", features = ["derive"] }
 cxx = "1.0"
+hex = "0.4.3"
 
 [build-dependencies]
 cxx-build = "1.0"

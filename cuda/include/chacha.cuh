@@ -27,7 +27,7 @@
 __device__ __forceinline__ void quarter_round(uint32_t* a, uint32_t* b, uint32_t* c, uint32_t* d);
 
 /** @brief Helper function to initialize the state for this block of ChaCha, based on the key,
- * nonce, counter, and ID of this block. Uses vector operations to increase performance.
+ * nonce, counter, and ID of this block.
  *
  * @param[out] state The initialized state.
  * @param key The encryption key in bytes.

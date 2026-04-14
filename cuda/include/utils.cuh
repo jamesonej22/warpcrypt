@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-/** @brief Utility to load an array of bytes into a big-endian unsigned 32-bit integer.
+/** @brief Utility to load an array of bytes into a little-endian unsigned 32-bit integer.
  *
  * @param p The array of bytes to load.
  * @return The packed 32-bit integer.
