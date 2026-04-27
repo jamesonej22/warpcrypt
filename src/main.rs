@@ -65,7 +65,7 @@ pub struct CommonArgs {
 
     /// Number of CUDA streams to use.
     #[arg(long, default_value_t = 1)]
-    streams: usize,
+    num_streams: usize,
 
     /// Padding mode (ECB modes only). Possible values: pkcs7, none. Ignored for CTR and
     /// ChaCha20.
@@ -148,7 +148,7 @@ fn parse_cli() -> Result<Config> {
         key_size,
         num_blocks: args.num_blocks,
         block_size: args.block_size,
-        num_streams: args.streams,
+        num_streams: args.num_streams,
     };
 
     Ok(Config {

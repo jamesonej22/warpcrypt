@@ -33,10 +33,10 @@ It provides GPU implementations of some common cryptographic algorithms, enablin
 ### Installation
 
 ```bash
-cargo install warpcrypt
+git clone https://github.com/jamesonej22/warpcrypt.git
+cd warpcrypt
+cargo install --path .
 ```
-
-Installation can be verified by running `cargo test` and observing that the tests pass.
 
 ### Examples
 
@@ -44,13 +44,13 @@ Encrypt a file using ChaCha20, with a CUDA block size of 192 and 2 CUDA streams:
 
 ```bash
 warpcrypt encrypt \
-    --algorithm chacha20
-    --key-hex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f \
+    --algorithm chacha20 \
+    --ke-_hex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f \
     --iv 01000000000000000000004a00000000 \
     --input plaintext.bin \
     --output ciphertext.bin \
-    --block_size 192 \
-    --num_streams 2
+    --block-size 192 \
+    --num-streams 2
 ```
 
 Decrypt a file using AES-ECB with key file `key.bin` using 1024 CUDA blocks (of default size 256 threads per block) and default padding (PKCS#7):
@@ -61,7 +61,7 @@ warpcrypt decrypt \
     --key-file key.bin \
     --input aes_ciphertext.bin \
     --output aes_plaintext.bin \
-    --num_blocks 1024
+    --num-blocks 1024
 ```
 
 ## Library Usage

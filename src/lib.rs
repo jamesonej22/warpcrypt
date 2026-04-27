@@ -27,10 +27,10 @@
 //! ### Installation
 //!
 //! ```bash
-//! cargo install warpcrypt
+//! git clone https://github.com/jamesonej22/warpcrypt.git
+//! cd warpcrypt
+//! cargo install --path .
 //! ```
-//!
-//! Installation can be verified by running `cargo test` and observing that the tests pass.
 //!
 //! ### Examples
 //!
@@ -44,7 +44,7 @@
 //!     --input plaintext.bin \
 //!     --output ciphertext.bin \
 //!     --block_size 192 \
-//!     --num_streams 2
+//!     --num-streams 2
 //! ```
 //!
 //! Decrypt a file using AES-ECB with key file `key.bin` using 1024 CUDA blocks (of default size 256 threads per block) and default padding (PKCS#7):
@@ -55,7 +55,7 @@
 //!     --key-file key.bin \
 //!     --input aes_ciphertext.bin \
 //!     --output aes_plaintext.bin \
-//!     --num_blocks 1024
+//!     --num-blocks 1024
 //! ```
 //!
 //! ## Library Usage
@@ -239,9 +239,9 @@ impl TryFrom<u32> for KeySize {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            128 => Ok(KeySize::KeySize128),
-            192 => Ok(KeySize::KeySize192),
-            256 => Ok(KeySize::KeySize256),
+            16 => Ok(KeySize::KeySize128),
+            24 => Ok(KeySize::KeySize192),
+            32 => Ok(KeySize::KeySize256),
             _ => Err(anyhow!("Invalid key size: {}", value)),
         }
     }
