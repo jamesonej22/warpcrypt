@@ -45,7 +45,7 @@ Encrypt a file using ChaCha20, with a CUDA block size of 192 and 2 CUDA streams:
 ```bash
 warpcrypt encrypt \
     --algorithm chacha20 \
-    --ke-_hex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f \
+    --key-hex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f \
     --iv 01000000000000000000004a00000000 \
     --input plaintext.bin \
     --output ciphertext.bin \
